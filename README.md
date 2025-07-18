@@ -93,22 +93,22 @@ In the `BlurException.rule` file, `false` indicates that the corresponding body 
 #### Example Commands for Video Processing
 1. **Process video and draw boxes:**
    ```bash
-   python main.py -i path/to/video.mp4 -t video
+   python video.py -i path/to/video.mp4 -t video
    ```
 
 2. **Process video and blur detected regions:**
    ```bash
-   python main.py -i path/to/video.mp4 -t video -b
+   python video.py -i path/to/video.mp4 -t video -b
    ```
 
 3. **Specify video output folder:**
    ```bash
-   python main.py -i path/to/video.mp4 -t video -vo path/to/video_output
+   python video.py -i path/to/video.mp4 -t video -vo path/to/video_output
    ```
 
 4. **Use blur rule:**
    ```bash
-   python main.py -i path/to/video.mp4 -t video -r 50/10
+   python video.py -i path/to/video.mp4 -t video -r 50/10
    ```
 
 ### How Video Processing Works
