@@ -2,6 +2,8 @@ import os
 import math
 import cv2
 import numpy as np
+import onnx
+from onnx import version_converter 
 import onnxruntime
 from onnxruntime.capi import _pybind_state as C
 import argparse
@@ -109,21 +111,38 @@ def _postprocess(output, resize_factor, pad_left, pad_top):
     return detections
 
 
+
+def _ensure_opset15(original_path: str) -> str:
+    """
+    Load the original ONNX model, convert it to opset 15 if needed,
+    and save to a new file. Returns the path to the opset-15 model.
+    """
+    base, ext = os.path.splitext(original_path)
+    conv_path = f"{base}_opset15{ext}"
+    if not os.path.exists(conv_path):
+        model = onnx.load(original_path)
+        converted = version_converter.convert_version(model, 15)
+        onnx.save(converted, conv_path)
+    return conv_path
+
 class NudeDetector:
     def __init__(self, providers=None):
+        # Convert best.onnx → best_opset15.onnx at runtime
+        model_orig = os.path.join(os.path.dirname(__file__), "Models/best.onnx")
+        model_to_load = _ensure_opset15(model_orig)
+
         self.onnx_session = onnxruntime.InferenceSession(
-            os.path.join(os.path.dirname(__file__), "Models/best.onnx"),
+            model_to_load,
             providers=C.get_available_providers() if not providers else providers,
         )
-        model_inputs = self.onnx_session.get_inputs()
-        input_shape = model_inputs[0].shape
-        self.input_width = input_shape[2]  # 320
-        self.input_height = input_shape[3]  # 320
-        self.input_name = model_inputs[0].name
+        inp = self.onnx_session.get_inputs()[0]
+        self.input_name   = inp.name
+        self.input_width  = inp.shape[2]
+        self.input_height = inp.shape[3]
 
-        # Initialize exception rules to None
         self.blur_exception_rules = None
-        self.full_blur_count = 0  # Initialize the full blur count
+        self.full_blur_count      = 0
+        
     def load_exception_rules(self, rule_file_path):
         if not rule_file_path:
             rule_file_path = "BlurException.rule"
