@@ -2,6 +2,8 @@ import os
 import math
 import cv2
 import numpy as np
+import onnx
+from onnx import version_converter 
 import onnxruntime
 from onnxruntime.capi import _pybind_state as C
 import argparse
@@ -28,7 +30,28 @@ __labels = [
     "BUTTOCKS_COVERED",
 ]
 
+def process_frames(video_path, detector, output_folder):
+    """
+    Read a video, run the detector on each frame,
+    censor/save each frame to output_folder.
+    """
+    import os
+    cap = cv2.VideoCapture(video_path)
+    os.makedirs(output_folder, exist_ok=True)
+    frame_idx = 0
 
+    while True:
+        ret, frame = cap.read()
+        if not ret:
+            break
+        frame_idx += 1
+
+        # detect + censor
+        dets = detector.detect_frame(frame)
+        out_path = os.path.join(output_folder, f"frame_{frame_idx:04d}.jpg")
+        detector.censor_frame(frame, dets, out_path)
+
+    cap.release()
 def _read_frame(frame, target_size=320):
     img_height, img_width = frame.shape[:2]
     img = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
@@ -109,17 +132,37 @@ def _postprocess(output, resize_factor, pad_left, pad_top):
     return detections
 
 
+def _ensure_opset15(original_path: str) -> str:
+    """
+    Load the original ONNX model, convert it to opset 15 if needed,
+    and save to a new file. Returns the path to the opset-15 model.
+    """
+    base, ext = os.path.splitext(original_path)
+    conv_path = f"{base}_opset15{ext}"
+    if not os.path.exists(conv_path):
+        model     = onnx.load(original_path)
+        converted = version_converter.convert_version(model, 15)
+        onnx.save(converted, conv_path)
+    return conv_path
+
+
 class NudeDetector:
     def __init__(self, providers=None):
+        # 1) locate the shipped model
+        model_orig   = os.path.join(os.path.dirname(__file__), "Models/best.onnx")
+        # 2) convert/downgrade to opset15 on first run
+        model_to_load = _ensure_opset15(model_orig)
+        # 3) now load the compatible model
         self.onnx_session = onnxruntime.InferenceSession(
-            os.path.join(os.path.dirname(__file__), "Models/best.onnx"),
+            model_to_load,
             providers=C.get_available_providers() if not providers else providers,
         )
-        model_inputs = self.onnx_session.get_inputs()
-        input_shape = model_inputs[0].shape
-        self.input_width = input_shape[2]  # 320
-        self.input_height = input_shape[3]  # 320
-        self.input_name = model_inputs[0].name
+
+        # 4) pull out input shape & name as before
+        inp = self.onnx_session.get_inputs()[0]
+        self.input_name   = inp.name
+        self.input_width  = inp.shape[2]  # 320
+        self.input_height = inp.shape[3]  # 320
 
         # Initialize exception rules to None
         self.blur_exception_rules = None
