@@ -7,11 +7,14 @@ from onnx import version_converter
 import onnxruntime
 import argparse
 from safevision_utils import (
+    apply_region_censor,
     cv2_imread,
     cv2_imwrite,
     create_onnx_session,
     ensure_blur_exception_rules,
     load_blur_exception_rules,
+    make_blur_kernel,
+    normalize_mask_shape,
     parse_provider_list,
 )
 
@@ -201,7 +204,18 @@ class NudeDetector:
 
         return detections
 
-    def censor(self, image_path, apply_blur=False, classes=[], output_path=None, full_blur_rule=0):
+    def censor(
+        self,
+        image_path,
+        apply_blur=False,
+        classes=[],
+        output_path=None,
+        full_blur_rule=0,
+        blur_kernel=(23, 23, 30),
+        mask_shape="rectangle",
+        use_solid_color=False,
+        solid_color=(0, 0, 0),
+    ):
         detections = self.detect(image_path)
         if classes:
             detections = [
@@ -239,8 +253,17 @@ class NudeDetector:
 
             if apply_blur and "EXPOSED" in label and should_blur:
                 print(f"Blur should be applied to: {label}")
-                # Blur only the regions labeled as "EXPOSED" and not in exceptions
-                img_blur[y:y + h, x:x + w] = cv2.GaussianBlur(img_blur[y:y + h, x:x + w], (23, 23), 30)
+                apply_region_censor(
+                    img_blur,
+                    x,
+                    y,
+                    w,
+                    h,
+                    blur_kernel=blur_kernel,
+                    use_solid_color=use_solid_color,
+                    solid_color=solid_color,
+                    mask_shape=mask_shape,
+                )
                 exposed_count += 1
 
             else:
@@ -262,9 +285,9 @@ class NudeDetector:
                 output_path = f"output/{os.path.basename(input_path)}_Detect{ext}"
 
         if apply_blur:
-            if exposed_count >= full_blur_rule:
+            if full_blur_rule > 0 and exposed_count >= full_blur_rule:
                 # Apply full blur to the whole image
-                img_blur = cv2.GaussianBlur(img_blur, (23, 23), 30)
+                img_blur = cv2.GaussianBlur(img_blur, (blur_kernel[0], blur_kernel[1]), blur_kernel[2])
 
             cv2_imwrite(output_path, img_blur)
         else:
@@ -314,6 +337,36 @@ def parse_args():
         help="Number of exposed boxes to trigger full image blur",
     )
     parser.add_argument(
+        "--mask-shape",
+        type=str,
+        choices=["rectangle", "ellipse", "oval"],
+        default="rectangle",
+        help="Shape used for regional censoring masks. Default is rectangle.",
+    )
+    parser.add_argument(
+        "--blur-strength",
+        type=int,
+        default=23,
+        help="Regional blur kernel strength. Larger odd numbers blur more. Default is 23.",
+    )
+    parser.add_argument(
+        "--blur-sigma",
+        type=float,
+        default=None,
+        help="Gaussian blur sigma for regional blur. Defaults to the blur strength.",
+    )
+    parser.add_argument(
+        "--color",
+        action="store_true",
+        help="Use a solid color instead of blur to mask detections.",
+    )
+    parser.add_argument(
+        "--mask-color",
+        type=str,
+        default="0,0,0",
+        help="Color to use for masking in BGR format. Default is black: '0,0,0'.",
+    )
+    parser.add_argument(
         "--providers",
         type=str,
         default=None,
@@ -333,6 +386,19 @@ if __name__ == "__main__":
     create_directories()  # Create directories before processing
 
     args = parse_args()
+    blur_kernel = make_blur_kernel(args.blur_strength, args.blur_sigma)
+    mask_shape = normalize_mask_shape(args.mask_shape)
+    solid_color = (0, 0, 0)
+    if args.color:
+        try:
+            color_parts = args.mask_color.split(",")
+            if len(color_parts) == 3:
+                solid_color = (int(color_parts[0]), int(color_parts[1]), int(color_parts[2]))
+        except ValueError:
+            print("Invalid mask color. Using default black.")
+
+    print(f"Using {mask_shape} regional mask shape")
+    print(f"Using regional blur kernel: {blur_kernel}")
 
     detector = NudeDetector(providers=parse_provider_list(args.providers))
     
@@ -353,11 +419,29 @@ if __name__ == "__main__":
     detect_path = f"Prosses/{os.path.basename(output_path)}"
 
     # Process blurred image and save in "Blur" directory
-    blur_censored_path = detector.censor(args.input, apply_blur=True, output_path=blur_path, full_blur_rule=args.full_blur_rule)
+    blur_censored_path = detector.censor(
+        args.input,
+        apply_blur=True,
+        output_path=blur_path,
+        full_blur_rule=args.full_blur_rule,
+        blur_kernel=blur_kernel,
+        mask_shape=mask_shape,
+        use_solid_color=args.color,
+        solid_color=solid_color,
+    )
     img_blur = cv2_imread(blur_censored_path)
 
     # Process non-blurred image and save in "Prosses" directory
-    censored_path = detector.censor(args.input, apply_blur=False, output_path=output_path, full_blur_rule=args.full_blur_rule)
+    censored_path = detector.censor(
+        args.input,
+        apply_blur=False,
+        output_path=output_path,
+        full_blur_rule=args.full_blur_rule,
+        blur_kernel=blur_kernel,
+        mask_shape=mask_shape,
+        use_solid_color=args.color,
+        solid_color=solid_color,
+    )
     img_combined = cv2_imread(censored_path)
     img_boxes = img_combined.copy()
 
@@ -370,7 +454,17 @@ if __name__ == "__main__":
         should_blur = detector.should_apply_blur(label)  # Checking exception rules
         
         if should_blur:
-            img_combined[y:y + h, x:x + w] = cv2.addWeighted(img_combined[y:y + h, x:x + w], 0, img_blur[y:y + h, x:x + w],1, 1)
+            apply_region_censor(
+                img_combined,
+                x,
+                y,
+                w,
+                h,
+                blur_kernel=blur_kernel,
+                use_solid_color=args.color,
+                solid_color=solid_color,
+                mask_shape=mask_shape,
+            )
         else:
             cv2.rectangle(img_boxes, (x, y), (x + w, y + h), (0, 255, 0), 2)
 

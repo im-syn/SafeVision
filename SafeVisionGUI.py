@@ -18,7 +18,7 @@ from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QH
                             QGroupBox, QRadioButton, QLineEdit, QTextEdit, QFrame,
                             QSizePolicy, QColorDialog, QSplitter, QScrollArea, QGridLayout,
                             QTreeWidget, QTreeWidgetItem, QAbstractItemView, QMenu, QAction,
-                            QStatusBar)
+                            QStatusBar, QSlider)
 from PyQt5.QtGui import QPixmap, QImage, QPalette, QColor, QIcon, QFont, QPainter, QTextCharFormat, QTextCursor
 from PyQt5.QtCore import Qt, QThread, pyqtSignal, QTimer, QObject
 import cv2
@@ -165,6 +165,7 @@ class VideoPlayerWidget(QWidget):
         self.current_frame = 0
         self.total_frames = 0
         self.is_playing = False
+        self.fps = 30
         
         self.init_ui()
         self.load_video()
@@ -207,21 +208,34 @@ class VideoPlayerWidget(QWidget):
         """)
         self.play_button.clicked.connect(self.toggle_play)
         controls_layout.addWidget(self.play_button)
+
+        back_button = QPushButton("‹")
+        back_button.setFixedSize(30, 30)
+        back_button.clicked.connect(lambda: self.step_frames(-1))
+        controls_layout.addWidget(back_button)
+
+        forward_button = QPushButton("›")
+        forward_button.setFixedSize(30, 30)
+        forward_button.clicked.connect(lambda: self.step_frames(1))
+        controls_layout.addWidget(forward_button)
         
         # Progress slider
-        self.progress_slider = QProgressBar()
+        self.progress_slider = QSlider(Qt.Horizontal)
+        self.progress_slider.setRange(0, 0)
         self.progress_slider.setStyleSheet("""
-            QProgressBar {
-                border: 2px solid #dee2e6;
-                border-radius: 5px;
-                text-align: center;
-                background-color: #f8f9fa;
+            QSlider::groove:horizontal {
+                height: 8px;
+                background: #dee2e6;
+                border-radius: 4px;
             }
-            QProgressBar::chunk {
-                background-color: #667eea;
-                border-radius: 3px;
+            QSlider::handle:horizontal {
+                background: #667eea;
+                width: 16px;
+                margin: -5px 0;
+                border-radius: 8px;
             }
         """)
+        self.progress_slider.sliderMoved.connect(self.seek_to_frame)
         controls_layout.addWidget(self.progress_slider)
         
         # Time label
@@ -238,8 +252,9 @@ class VideoPlayerWidget(QWidget):
             if self.cap.isOpened():
                 self.total_frames = int(self.cap.get(cv2.CAP_PROP_FRAME_COUNT))
                 fps = self.cap.get(cv2.CAP_PROP_FPS)
-                self.duration = self.total_frames / fps if fps > 0 else 0
-                self.progress_slider.setMaximum(self.total_frames)
+                self.fps = fps if fps > 0 else 30
+                self.duration = self.total_frames / self.fps if self.fps > 0 else 0
+                self.progress_slider.setRange(0, max(0, self.total_frames - 1))
                 
                 # Show first frame
                 ret, frame = self.cap.read()
@@ -275,11 +290,27 @@ class VideoPlayerWidget(QWidget):
             self.play_button.setText("▶")
             self.is_playing = False
         else:
-            fps = self.cap.get(cv2.CAP_PROP_FPS)
-            interval = int(1000 / fps) if fps > 0 else 33  # 33ms default
+            interval = int(1000 / self.fps) if self.fps > 0 else 33
             self.timer.start(interval)
             self.play_button.setText("⏸")
             self.is_playing = True
+
+    def seek_to_frame(self, frame_index):
+        """Seek to an exact frame from the slider."""
+        if not self.cap or not self.cap.isOpened():
+            return
+        frame_index = max(0, min(int(frame_index), max(0, self.total_frames - 1)))
+        self.current_frame = frame_index
+        self.cap.set(cv2.CAP_PROP_POS_FRAMES, frame_index)
+        ret, frame = self.cap.read()
+        if ret:
+            self.display_frame(frame)
+            self.progress_slider.setValue(frame_index)
+            self.update_time_label()
+
+    def step_frames(self, amount):
+        """Step one frame backward or forward."""
+        self.seek_to_frame(self.current_frame + amount)
             
     def update_frame(self):
         """Update to next frame."""
@@ -301,9 +332,8 @@ class VideoPlayerWidget(QWidget):
     def update_time_label(self):
         """Update time display."""
         if self.total_frames > 0:
-            fps = self.cap.get(cv2.CAP_PROP_FPS) if self.cap else 30
-            current_time = self.current_frame / fps if fps > 0 else 0
-            total_time = self.total_frames / fps if fps > 0 else 0
+            current_time = self.current_frame / self.fps if self.fps > 0 else 0
+            total_time = self.total_frames / self.fps if self.fps > 0 else 0
             
             current_str = f"{int(current_time//60):02d}:{int(current_time%60):02d}"
             total_str = f"{int(total_time//60):02d}:{int(total_time%60):02d}"
@@ -509,21 +539,22 @@ class EnhancedVideoPlayer(QWidget):
         layout.addWidget(self.video_label)
         
         # Progress bar (clickable)
-        self.progress_slider = QProgressBar()
+        self.progress_slider = QSlider(Qt.Horizontal)
+        self.progress_slider.setRange(0, 0)
         self.progress_slider.setStyleSheet("""
-            QProgressBar {
-                border: 2px solid #dee2e6;
+            QSlider::groove:horizontal {
+                height: 10px;
+                background: #dee2e6;
                 border-radius: 5px;
-                text-align: center;
-                background-color: #f8f9fa;
-                height: 20px;
             }
-            QProgressBar::chunk {
-                background-color: #667eea;
-                border-radius: 3px;
+            QSlider::handle:horizontal {
+                background: #667eea;
+                width: 18px;
+                margin: -5px 0;
+                border-radius: 9px;
             }
         """)
-        self.progress_slider.mousePressEvent = self.seek_video
+        self.progress_slider.sliderMoved.connect(self.seek_to_frame)
         layout.addWidget(self.progress_slider)
         
         # Controls layout
@@ -547,6 +578,16 @@ class EnhancedVideoPlayer(QWidget):
         """)
         self.play_button.clicked.connect(self.toggle_play)
         controls_layout.addWidget(self.play_button)
+
+        back_button = QPushButton("‹")
+        back_button.setFixedSize(40, 40)
+        back_button.clicked.connect(lambda: self.step_frames(-1))
+        controls_layout.addWidget(back_button)
+
+        forward_button = QPushButton("›")
+        forward_button.setFixedSize(40, 40)
+        forward_button.clicked.connect(lambda: self.step_frames(1))
+        controls_layout.addWidget(forward_button)
         
         # Stop button
         stop_button = QPushButton("⏹")
@@ -572,23 +613,24 @@ class EnhancedVideoPlayer(QWidget):
         vol_label = QLabel("🔊")
         controls_layout.addWidget(vol_label)
         
-        self.volume_slider = QProgressBar()
-        self.volume_slider.setMaximum(100)
+        self.volume_slider = QSlider(Qt.Horizontal)
+        self.volume_slider.setRange(0, 100)
         self.volume_slider.setValue(self.volume)
         self.volume_slider.setFixedWidth(100)
         self.volume_slider.setStyleSheet("""
-            QProgressBar {
-                border: 1px solid #dee2e6;
+            QSlider::groove:horizontal {
+                height: 6px;
+                background: #dee2e6;
                 border-radius: 3px;
-                background-color: #f8f9fa;
-                height: 15px;
             }
-            QProgressBar::chunk {
-                background-color: #667eea;
-                border-radius: 2px;
+            QSlider::handle:horizontal {
+                background: #667eea;
+                width: 14px;
+                margin: -4px 0;
+                border-radius: 7px;
             }
         """)
-        self.volume_slider.mousePressEvent = self.change_volume
+        self.volume_slider.valueChanged.connect(self.change_volume)
         controls_layout.addWidget(self.volume_slider)
         
         controls_layout.addStretch()
@@ -622,7 +664,7 @@ class EnhancedVideoPlayer(QWidget):
                 fps = self.cap.get(cv2.CAP_PROP_FPS)
                 self.fps = fps if fps > 0 else 30
                 self.duration = self.total_frames / self.fps
-                self.progress_slider.setMaximum(self.total_frames)
+                self.progress_slider.setRange(0, max(0, self.total_frames - 1))
                 
                 # Show first frame
                 ret, frame = self.cap.read()
@@ -695,30 +737,27 @@ class EnhancedVideoPlayer(QWidget):
             self.play_button.setText("▶")
             self.is_playing = False
             
-    def seek_video(self, event):
-        """Seek to position based on click."""
-        if self.cap and self.total_frames > 0:
-            click_pos = event.x()
-            progress_width = self.progress_slider.width()
-            seek_frame = int((click_pos / progress_width) * self.total_frames)
-            seek_frame = max(0, min(seek_frame, self.total_frames - 1))
-            
-            self.current_frame = seek_frame
-            self.cap.set(cv2.CAP_PROP_POS_FRAMES, seek_frame)
-            
-            ret, frame = self.cap.read()
-            if ret:
-                self.display_frame(frame)
-                self.progress_slider.setValue(seek_frame)
-                self.update_time_label()
-                
-    def change_volume(self, event):
-        """Change volume based on click."""
-        click_pos = event.x()
-        slider_width = self.volume_slider.width()
-        self.volume = int((click_pos / slider_width) * 100)
-        self.volume = max(0, min(self.volume, 100))
-        self.volume_slider.setValue(self.volume)
+    def seek_to_frame(self, frame_index):
+        """Seek to an exact frame from the slider."""
+        if not self.cap or not self.cap.isOpened() or self.total_frames <= 0:
+            return
+        seek_frame = max(0, min(int(frame_index), self.total_frames - 1))
+        self.current_frame = seek_frame
+        self.cap.set(cv2.CAP_PROP_POS_FRAMES, seek_frame)
+
+        ret, frame = self.cap.read()
+        if ret:
+            self.display_frame(frame)
+            self.progress_slider.setValue(seek_frame)
+            self.update_time_label()
+
+    def step_frames(self, amount):
+        """Step one frame backward or forward."""
+        self.seek_to_frame(self.current_frame + amount)
+
+    def change_volume(self, value):
+        """Store the UI volume value for future audio-capable playback."""
+        self.volume = max(0, min(int(value), 100))
         
     def update_time_label(self):
         """Update time display."""
@@ -1060,6 +1099,32 @@ class MultiPreviewWidget(QWidget):
                         except Exception as e:
                             print(f"Error opening video: {e}")
                     preview.mousePressEvent = lambda event: open_video() if event.button() == Qt.LeftButton else None
+            elif file_path.lower().endswith(('.json', '.csv', '.edl', '.fcpxml', '.xml')):
+                preview = QLabel()
+                preview.setAlignment(Qt.AlignLeft | Qt.AlignTop)
+                preview.setFixedSize(220, 165)
+                preview.setWordWrap(True)
+                preview.setStyleSheet("""
+                    QLabel {
+                        background-color: #f8f9fa;
+                        border: 2px solid #dee2e6;
+                        border-radius: 8px;
+                        padding: 8px;
+                        color: #343a40;
+                        font-family: Consolas, monospace;
+                        font-size: 10px;
+                    }
+                """)
+                try:
+                    with open(file_path, "r", encoding="utf-8", errors="replace") as text_file:
+                        text = text_file.read(600)
+                    preview.setText(text or os.path.basename(file_path))
+                except Exception:
+                    preview.setText(os.path.basename(file_path))
+            else:
+                preview = QLabel(os.path.basename(file_path))
+                preview.setAlignment(Qt.AlignCenter)
+                preview.setMinimumSize(200, 150)
         else:
             preview = QLabel("File not found")
             preview.setAlignment(Qt.AlignCenter)
@@ -2748,7 +2813,7 @@ class SafeVisionGUI(QMainWindow):
         
         # Blur options
         blur_group = QGroupBox("Blur Options")
-        blur_group.setFixedHeight(150)  # Fixed height
+        blur_group.setFixedHeight(190)  # Fixed height
         blur_layout = QVBoxLayout(blur_group)
         
         self.enhanced_blur_toggle = ModernToggle("Enhanced Blur (Stronger)")
@@ -2780,6 +2845,19 @@ class SafeVisionGUI(QMainWindow):
         shape_layout.addWidget(self.mask_shape_combo)
         shape_layout.addStretch()
         blur_layout.addLayout(shape_layout)
+
+        strength_layout = QHBoxLayout()
+        strength_label = QLabel("Blur Strength:")
+        strength_label.setFixedHeight(25)
+        strength_layout.addWidget(strength_label)
+        self.blur_strength_spin = QSpinBox()
+        self.blur_strength_spin.setRange(3, 151)
+        self.blur_strength_spin.setSingleStep(2)
+        self.blur_strength_spin.setValue(int(self.settings.get("blur_strength", 23)))
+        self.blur_strength_spin.setFixedHeight(25)
+        strength_layout.addWidget(self.blur_strength_spin)
+        strength_layout.addStretch()
+        blur_layout.addLayout(strength_layout)
         
         layout.addWidget(blur_group)
         
@@ -2809,6 +2887,49 @@ class SafeVisionGUI(QMainWindow):
         video_layout.addWidget(self.delete_frames_toggle)
         
         layout.addWidget(video_group)
+
+        # Analysis and marker export options
+        analysis_group = QGroupBox("Analysis / Editor Markers")
+        analysis_group.setFixedHeight(170)
+        analysis_layout = QVBoxLayout(analysis_group)
+
+        self.analyze_only_toggle = ModernToggle("Analyze Only (No Rendered Video)")
+        self.analyze_only_toggle.setFixedHeight(28)
+        self.analyze_only_toggle.setChecked(self.settings.get("analyze_only", False))
+        analysis_layout.addWidget(self.analyze_only_toggle)
+
+        self.save_report_toggle = ModernToggle("Write JSON/CSV Detection Reports")
+        self.save_report_toggle.setFixedHeight(28)
+        self.save_report_toggle.setChecked(self.settings.get("save_report", False))
+        analysis_layout.addWidget(self.save_report_toggle)
+
+        report_layout = QHBoxLayout()
+        report_layout.addWidget(QLabel("Report:"))
+        self.report_formats_combo = QComboBox()
+        self.report_formats_combo.addItems(["json,csv", "json", "csv"])
+        self.report_formats_combo.setCurrentText(self.settings.get("report_formats", "json,csv"))
+        report_layout.addWidget(self.report_formats_combo)
+        analysis_layout.addLayout(report_layout)
+
+        marker_layout = QHBoxLayout()
+        marker_layout.addWidget(QLabel("Markers:"))
+        self.marker_export_combo = QComboBox()
+        self.marker_export_combo.addItems(["none", "edl", "fcpxml", "both"])
+        self.marker_export_combo.setCurrentText(self.settings.get("export_markers", "none") or "none")
+        marker_layout.addWidget(self.marker_export_combo)
+        analysis_layout.addLayout(marker_layout)
+
+        gap_layout = QHBoxLayout()
+        gap_layout.addWidget(QLabel("Marker Gap:"))
+        self.marker_gap_spin = QDoubleSpinBox()
+        self.marker_gap_spin.setRange(0.1, 30.0)
+        self.marker_gap_spin.setSingleStep(0.25)
+        self.marker_gap_spin.setValue(float(self.settings.get("marker_gap", 1.0)))
+        self.marker_gap_spin.setSuffix(" sec")
+        gap_layout.addWidget(self.marker_gap_spin)
+        analysis_layout.addLayout(gap_layout)
+
+        layout.addWidget(analysis_group)
         
         # Output directory
         output_group = QGroupBox("Output Directory")
@@ -3248,6 +3369,14 @@ class SafeVisionGUI(QMainWindow):
             # Blur option
             if self.blur_radio.isChecked():
                 command.append("-b")
+
+            if self.solid_color_toggle.isChecked():
+                command.append("--color")
+                color = self.color_button.get_color()
+                command.extend(["--mask-color", f"{color[0]},{color[1]},{color[2]}"])
+
+            command.extend(["--mask-shape", self.mask_shape_combo.currentText()])
+            command.extend(["--blur-strength", str(self.blur_strength_spin.value())])
                 
             # Full blur rule for images
             if self.fbr_labels_spin.value() > 0 and self.enable_fbr_param.isChecked():
@@ -3269,7 +3398,9 @@ class SafeVisionGUI(QMainWindow):
                 command.extend(["-vo", self.output_dir_edit.text().strip()])
             
             # Process mode
-            if self.boxes_radio.isChecked():
+            if self.analyze_only_toggle.isChecked():
+                command.append("--analyze-only")
+            elif self.boxes_radio.isChecked():
                 command.append("-b")
                 if self.blur_radio.isChecked():
                     command.append("--blur")
@@ -3296,6 +3427,16 @@ class SafeVisionGUI(QMainWindow):
                 command.extend(["--mask-color", f"{color[0]},{color[1]},{color[2]}"])
 
             command.extend(["--mask-shape", self.mask_shape_combo.currentText()])
+            command.extend(["--blur-strength", str(self.blur_strength_spin.value())])
+
+            if self.analyze_only_toggle.isChecked() or self.save_report_toggle.isChecked():
+                command.append("--save-report")
+            command.extend(["--report-formats", self.report_formats_combo.currentText()])
+
+            marker_format = self.marker_export_combo.currentText()
+            if marker_format != "none":
+                command.extend(["--export-markers", marker_format])
+                command.extend(["--marker-gap", str(self.marker_gap_spin.value())])
                 
             # Monitoring rules
             if (self.percent_spin.value() > 0 or self.count_spin.value() > 0) and self.enable_r_param.isChecked():
@@ -3443,7 +3584,7 @@ class SafeVisionGUI(QMainWindow):
                     continue
                     
                 # Look for files that start with input name or contain it
-                for ext in ['.jpg', '.jpeg', '.png', '.mp4', '.avi', '.mov']:
+                for ext in ['.jpg', '.jpeg', '.png', '.mp4', '.avi', '.mov', '.json', '.csv', '.edl', '.fcpxml']:
                     # Pattern 1: input_name + something + extension (e.g., i1_Output.png)
                     pattern1 = os.path.join(output_dir, f"{input_name}*{ext}")
                     files1 = glob.glob(pattern1)
@@ -3607,6 +3748,12 @@ class SafeVisionGUI(QMainWindow):
             "solid_color": False,
             "mask_shape": "rectangle",
             "mask_color": [0, 0, 0],
+            "blur_strength": 23,
+            "analyze_only": False,
+            "save_report": False,
+            "report_formats": "json,csv",
+            "export_markers": "none",
+            "marker_gap": 1.0,
             "include_audio": False,
             "percent_threshold": 10.0,
             "count_threshold": 5,
@@ -3643,6 +3790,12 @@ class SafeVisionGUI(QMainWindow):
             "solid_color": self.solid_color_toggle.isChecked(),
             "mask_shape": self.mask_shape_combo.currentText(),
             "mask_color": self.color_button.get_color(),
+            "blur_strength": self.blur_strength_spin.value(),
+            "analyze_only": self.analyze_only_toggle.isChecked(),
+            "save_report": self.save_report_toggle.isChecked(),
+            "report_formats": self.report_formats_combo.currentText(),
+            "export_markers": self.marker_export_combo.currentText(),
+            "marker_gap": self.marker_gap_spin.value(),
             "include_audio": self.include_audio_toggle.isChecked(),
             "percent_threshold": self.percent_spin.value(),
             "count_threshold": self.count_spin.value(),

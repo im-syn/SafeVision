@@ -16,11 +16,17 @@
     "codec": "mp4v",
     "mask_shape": "rectangle",
     "mask_color": "0,0,0",
+    "blur_strength": 23,
+    "blur_sigma": 0.0,
     "enhanced_blur": false,
     "with_audio": false,
     "delete_frames": true,
     "rule": "0/0",
-    "full_blur_rule": ""
+    "full_blur_rule": "",
+    "save_report": false,
+    "report_formats": "json,csv",
+    "export_markers": "",
+    "marker_gap": 1.0
   },
   "screen_guard": {
     "monitor": 1,

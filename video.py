@@ -17,11 +17,19 @@ import urllib.request
 import tempfile
 from pathlib import Path
 from safevision_utils import (
+    apply_region_censor as shared_apply_region_censor,
     cv2_imwrite,
     create_onnx_session,
     load_blur_exception_rules,
+    make_blur_kernel,
+    normalize_mask_shape,
     open_video_capture,
     parse_provider_list,
+)
+from marker_export import (
+    detection_events_from_frame,
+    export_marker_files,
+    write_detection_reports,
 )
 
 # Configuration variables - adjust these for different visual effects
@@ -313,29 +321,17 @@ class NudeDetector:
         return detections
 
     def apply_region_censor(self, image, x, y, w, h, blur_kernel):
-        image_height, image_width = image.shape[:2]
-        x1 = max(0, x)
-        y1 = max(0, y)
-        x2 = min(image_width, x + w)
-        y2 = min(image_height, y + h)
-        if x2 <= x1 or y2 <= y1:
-            return
-
-        roi = image[y1:y2, x1:x2]
-        roi_height, roi_width = roi.shape[:2]
-        if CONFIG['USE_SOLID_COLOR']:
-            censored_roi = np.full((roi_height, roi_width, 3), CONFIG['SOLID_COLOR'], dtype=np.uint8)
-        else:
-            censored_roi = cv2.GaussianBlur(roi, (blur_kernel[0], blur_kernel[1]), blur_kernel[2])
-
-        if CONFIG.get('MASK_SHAPE') == 'ellipse':
-            mask = np.zeros((roi_height, roi_width), dtype=np.uint8)
-            center = (roi_width // 2, roi_height // 2)
-            axes = (max(1, roi_width // 2), max(1, roi_height // 2))
-            cv2.ellipse(mask, center, axes, 0, 0, 360, 255, -1)
-            roi[mask > 0] = censored_roi[mask > 0]
-        else:
-            image[y1:y2, x1:x2] = censored_roi
+        return shared_apply_region_censor(
+            image,
+            x,
+            y,
+            w,
+            h,
+            blur_kernel=blur_kernel,
+            use_solid_color=CONFIG['USE_SOLID_COLOR'],
+            solid_color=CONFIG['SOLID_COLOR'],
+            mask_shape=CONFIG.get('MASK_SHAPE', 'rectangle'),
+        )
 
     def censor_frame(self, frame, detections, output_path, nsfw_percentage=None, force_full_blur=False, save_frame=True):
         img_boxes = frame.copy()
@@ -494,7 +490,9 @@ class NudeVideoProcessor:
             self._process_frames_task()
             return
 
-        if args and hasattr(args, 'boxes') and args.boxes:
+        if args and getattr(args, 'analyze_only', False):
+            self._process_analysis_stream()
+        elif args and hasattr(args, 'boxes') and args.boxes:
             self._process_boxes_video_stream(include_blur=hasattr(args, 'blur') and args.blur)
         else:
             self._process_video_stream()
@@ -519,6 +517,104 @@ class NudeVideoProcessor:
         if exposed_count >= CONFIG['FULL_BLUR_LABELS']:
             stats["frames_with_required_labels"] += 1
         return exposed_count
+
+    def _metadata(self, total_frames=None, width=None, height=None):
+        return {
+            "source_path": os.path.abspath(self.video_path),
+            "source_name": os.path.basename(self.video_path),
+            "input_name": self.input_filename,
+            "fps": float(self.original_fps or 30.0),
+            "total_frames": int(total_frames or 0),
+            "duration_seconds": round((total_frames or 0) / float(self.original_fps or 30.0), 6),
+            "width": int(width or self.cap.get(cv2.CAP_PROP_FRAME_WIDTH) or 0),
+            "height": int(height or self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT) or 0),
+        }
+
+    def _record_detection_events(self, events, detections, frame_count):
+        events.extend(detection_events_from_frame(detections, frame_count, float(self.original_fps or 30.0)))
+
+    def _analysis_stats(self, stats):
+        result = dict(stats)
+        total_frames = result.get("total_frames", 0)
+        frames_with_exposed = result.get("frames_with_exposed", 0)
+        result["frames_with_exposed_percentage"] = round(
+            (frames_with_exposed / total_frames * 100) if total_frames else 0.0,
+            4,
+        )
+        return result
+
+    def _write_detection_outputs(self, events, stats, total_frames, width, height, force_report=False):
+        metadata = self._metadata(total_frames=total_frames, width=width, height=height)
+        written = []
+
+        should_write_report = force_report or bool(args and getattr(args, "save_report", False))
+        if should_write_report:
+            report_formats = getattr(args, "report_formats", "json,csv") if args else "json,csv"
+            written.extend(
+                write_detection_reports(
+                    self.video_output_folder,
+                    self.input_filename,
+                    events,
+                    metadata=metadata,
+                    stats=self._analysis_stats(stats),
+                    formats=report_formats,
+                )
+            )
+
+        marker_formats = getattr(args, "export_markers", "") if args else ""
+        if marker_formats:
+            marker_gap = getattr(args, "marker_gap", 1.0) if args else 1.0
+            written.extend(
+                export_marker_files(
+                    self.video_output_folder,
+                    self.input_filename,
+                    events,
+                    metadata=metadata,
+                    formats=marker_formats,
+                    gap_seconds=marker_gap,
+                )
+            )
+
+        for path in written:
+            print(f"Analysis output saved at: {path}")
+        return written
+
+    def _process_analysis_stream(self):
+        total_frames = int(self.cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        stats = self._empty_video_stats()
+        events = []
+        frame_count = 0
+        width = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH) or 0)
+        height = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT) or 0)
+
+        try:
+            with tqdm(total=total_frames if total_frames > 0 else None, desc="Analyzing Video", unit="frames", ncols=100, mininterval=0.5) as pbar:
+                while True:
+                    ret, frame = self.cap.read()
+                    if not ret:
+                        break
+                    frame_count += 1
+                    if not width or not height:
+                        height, width = frame.shape[:2]
+
+                    detections = self.detector.detect_frame(frame)
+                    self._update_video_stats(stats, detections)
+                    self._record_detection_events(events, detections, frame_count)
+                    pbar.update(1)
+        finally:
+            self.cap.release()
+
+        if frame_count == 0:
+            print("No frames were read from the input video.")
+            return
+
+        self._write_detection_outputs(events, stats, frame_count, width, height, force_report=True)
+        summary = self._analysis_stats(stats)
+        print(
+            f"\nAnalysis complete: {len(events)} detections across "
+            f"{summary['frames_with_exposed']} exposed frames "
+            f"({summary['frames_with_exposed_percentage']:.2f}%)."
+        )
 
     def _should_apply_full_blur_from_stats(self, stats):
         total_frames = stats["total_frames"]
@@ -572,8 +668,11 @@ class NudeVideoProcessor:
         output_path = os.path.join(self.video_output_folder, output_filename)
         total_frames = int(self.cap.get(cv2.CAP_PROP_FRAME_COUNT))
         stats = self._empty_video_stats()
+        events = []
         frame_count = 0
         out = None
+        width = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH) or 0)
+        height = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT) or 0)
 
         try:
             with tqdm(total=total_frames if total_frames > 0 else None, desc="Processing Video", unit="frames", ncols=100, mininterval=0.5) as pbar:
@@ -592,6 +691,7 @@ class NudeVideoProcessor:
 
                     detections = self.detector.detect_frame(frame)
                     frame_exposed_count = self._update_video_stats(stats, detections)
+                    self._record_detection_events(events, detections, frame_count)
 
                     if frame_count % 50 == 0:
                         if frame_exposed_count > 0:
@@ -639,6 +739,8 @@ class NudeVideoProcessor:
                 print(f"\nFailed to add audio. Video saved at: {output_path}")
         else:
             print(f"\nVideo saved at: {output_path}")
+
+        self._write_detection_outputs(events, stats, frame_count, width, height)
 
         if args and hasattr(args, 'delete_frames') and args.delete_frames:
             print("No intermediate frame images were written in video mode.")
@@ -720,8 +822,12 @@ class NudeVideoProcessor:
         boxes_filename = f"{self.input_filename}{CONFIG['OUTPUT_VIDEO_BOXES_SUFFIX']}"
         video_output_path = os.path.join(self.video_output_folder, boxes_filename)
         total_frames = int(self.cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        stats = self._empty_video_stats()
+        events = []
         frame_count = 0
         out = None
+        width = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH) or 0)
+        height = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT) or 0)
 
         try:
             with tqdm(total=total_frames if total_frames > 0 else None, desc="Generating Video with Boxes", unit="frames", ncols=100, mininterval=0.5) as pbar:
@@ -738,6 +844,8 @@ class NudeVideoProcessor:
                             return
 
                     detections = self.detector.detect_frame(frame)
+                    self._update_video_stats(stats, detections)
+                    self._record_detection_events(events, detections, frame_count)
                     out.write(self._render_boxed_frame(frame, detections, include_blur=include_blur))
                     pbar.update(1)
         finally:
@@ -759,6 +867,8 @@ class NudeVideoProcessor:
                 print(f"\nFailed to add audio. Video with boxes saved at: {video_output_path}")
         else:
             print(f"\nVideo with boxes saved at: {video_output_path}")
+
+        self._write_detection_outputs(events, stats, frame_count, width, height)
 
         if args and hasattr(args, 'delete_frames') and args.delete_frames:
             print("No intermediate frame images were written in video mode.")
@@ -934,16 +1044,7 @@ class NudeVideoProcessor:
                     if 0 <= y < frame.shape[0] and 0 <= x < frame.shape[1] and 0 <= y + h < frame.shape[0] and 0 <= x + w < frame.shape[1]:
                         # Apply blur or solid color if needed
                         if include_blur and is_exposed and self.detector.should_apply_blur(label):
-                            if CONFIG['USE_SOLID_COLOR']:
-                                # Apply solid color mask
-                                boxed_frame[y:y + h, x:x + w] = np.full(
-                                    (h, w, 3), CONFIG['SOLID_COLOR'], dtype=np.uint8
-                                )
-                            else:
-                                # Apply blur with configured strength
-                                boxed_frame[y:y + h, x:x + w] = cv2.GaussianBlur(boxed_frame[y:y + h, x:x + w], 
-                                                                               (blur_kernel[0], blur_kernel[1]), 
-                                                                               blur_kernel[2])
+                            self.detector.apply_region_censor(boxed_frame, x, y, w, h, blur_kernel)
                         
                         # Always draw the box and label
                         cv2.rectangle(boxed_frame, (x, y), (x + w, y + h), box_color, 2)
@@ -1254,8 +1355,22 @@ def parse_args():
                       help="Use solid color instead of blur to mask NSFW content")
     parser.add_argument("--mask-color", type=str, default="0,0,0", 
                       help="Color to use for masking in BGR format (blue,green,red). Default is black: '0,0,0'")
-    parser.add_argument("--mask-shape", type=str, choices=["rectangle", "ellipse"], default="rectangle",
+    parser.add_argument("--mask-shape", type=str, choices=["rectangle", "ellipse", "oval"], default="rectangle",
                       help="Shape used for regional censoring masks. Default is rectangle.")
+    parser.add_argument("--blur-strength", type=int, default=None,
+                      help="Regional blur kernel strength. Larger odd numbers blur more. Default keeps built-in strengths.")
+    parser.add_argument("--blur-sigma", type=float, default=None,
+                      help="Gaussian blur sigma for regional blur. Defaults to the blur strength.")
+    parser.add_argument("--analyze-only", action="store_true",
+                      help="Analyze the video and write reports/markers without rendering a censored video.")
+    parser.add_argument("--save-report", action="store_true",
+                      help="Write JSON/CSV detection reports for this run.")
+    parser.add_argument("--report-formats", type=str, default="json,csv",
+                      help="Comma-separated report formats: json,csv. Default is json,csv.")
+    parser.add_argument("--export-markers", type=str, default="",
+                      help="Comma-separated marker formats: edl,fcpxml,both/all. Empty disables marker export.")
+    parser.add_argument("--marker-gap", type=float, default=1.0,
+                      help="Seconds between detections before starting a new editor marker. Default is 1.0.")
     parser.add_argument("--providers", type=str, default=None,
                       help="Comma-separated ONNX Runtime providers, e.g. CUDAExecutionProvider,CPUExecutionProvider")
     return parser.parse_args()
@@ -1415,8 +1530,20 @@ if __name__ == "__main__":
         except ValueError:
             print("Invalid color format. Using default black color.")
 
-    CONFIG['MASK_SHAPE'] = args.mask_shape
+    if args.blur_strength:
+        blur_kernel = make_blur_kernel(args.blur_strength, args.blur_sigma, default=CONFIG['BLUR_STRENGTH_NORMAL'])
+        CONFIG['BLUR_STRENGTH_NORMAL'] = blur_kernel
+        CONFIG['BLUR_STRENGTH_HIGH'] = blur_kernel
+        print(f"Using custom regional blur kernel: {blur_kernel}")
+
+    CONFIG['MASK_SHAPE'] = normalize_mask_shape(args.mask_shape)
     print(f"Using {CONFIG['MASK_SHAPE']} regional mask shape")
+    if args.analyze_only:
+        print("Analyze-only mode enabled. No censored video will be rendered.")
+    if args.save_report or args.analyze_only:
+        print(f"Detection reports enabled: {args.report_formats}")
+    if args.export_markers:
+        print(f"Marker export enabled: {args.export_markers}")
     
     # Check if we need FFmpeg for this run
     if args.task == "video" and args.with_audio:

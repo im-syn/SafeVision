@@ -118,6 +118,77 @@ def cv2_imwrite(path, image, params=None):
         return cv2.imwrite(path, image, params or [])
 
 
+def normalize_mask_shape(mask_shape="rectangle"):
+    value = str(mask_shape or "rectangle").strip().lower()
+    if value in {"ellipse", "oval", "circle", "round"}:
+        return "ellipse"
+    return "rectangle"
+
+
+def make_blur_kernel(strength=None, sigma=None, default=(23, 23, 30)):
+    if strength in (None, ""):
+        return default
+
+    try:
+        kernel = int(float(strength))
+    except (TypeError, ValueError):
+        return default
+
+    kernel = max(3, min(kernel, 151))
+    if kernel % 2 == 0:
+        kernel += 1
+
+    if sigma in (None, ""):
+        sigma_value = max(1.0, float(kernel))
+    else:
+        try:
+            sigma_value = max(1.0, float(sigma))
+        except (TypeError, ValueError):
+            sigma_value = max(1.0, float(kernel))
+
+    return (kernel, kernel, sigma_value)
+
+
+def apply_region_censor(
+    image,
+    x,
+    y,
+    w,
+    h,
+    blur_kernel=(23, 23, 30),
+    use_solid_color=False,
+    solid_color=(0, 0, 0),
+    mask_shape="rectangle",
+):
+    image_height, image_width = image.shape[:2]
+    x1 = max(0, int(x))
+    y1 = max(0, int(y))
+    x2 = min(image_width, int(x + w))
+    y2 = min(image_height, int(y + h))
+    if x2 <= x1 or y2 <= y1:
+        return False
+
+    roi = image[y1:y2, x1:x2]
+    roi_height, roi_width = roi.shape[:2]
+
+    if use_solid_color:
+        censored_roi = np.full((roi_height, roi_width, 3), solid_color, dtype=np.uint8)
+    else:
+        kernel_x, kernel_y, kernel_sigma = blur_kernel
+        censored_roi = cv2.GaussianBlur(roi, (int(kernel_x), int(kernel_y)), float(kernel_sigma))
+
+    if normalize_mask_shape(mask_shape) == "ellipse":
+        mask = np.zeros((roi_height, roi_width), dtype=np.uint8)
+        center = (roi_width // 2, roi_height // 2)
+        axes = (max(1, roi_width // 2), max(1, roi_height // 2))
+        cv2.ellipse(mask, center, axes, 0, 0, 360, 255, -1)
+        roi[mask > 0] = censored_roi[mask > 0]
+    else:
+        image[y1:y2, x1:x2] = censored_roi
+
+    return True
+
+
 class ManagedVideoCapture:
     """cv2.VideoCapture wrapper with a Windows Unicode-path fallback."""
 

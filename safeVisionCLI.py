@@ -144,11 +144,17 @@ def default_config():
             "codec": "mp4v",
             "mask_shape": "rectangle",
             "mask_color": "0,0,0",
+            "blur_strength": 23,
+            "blur_sigma": 0.0,
             "enhanced_blur": False,
             "with_audio": False,
             "delete_frames": True,
             "rule": "0/0",
             "full_blur_rule": "",
+            "save_report": False,
+            "report_formats": "json,csv",
+            "export_markers": "",
+            "marker_gap": 1.0,
         },
         "screen_guard": {
             "monitor": 1,
@@ -805,6 +811,7 @@ def command_process(args):
         return 2
 
     if target == "image":
+        processing = config["processing"]
         command = [python_command(), str(script_path("image")), "-i", str(input_path)]
         if args.output:
             command.extend(["-o", args.output])
@@ -812,6 +819,24 @@ def command_process(args):
             command.append("-b")
         if args.full_blur_rule:
             command.extend(["-fbr", args.full_blur_rule])
+        if getattr(args, "color", False):
+            command.append("--color")
+        mask_color = getattr(args, "mask_color", None) or processing.get("mask_color")
+        if mask_color:
+            command.extend(["--mask-color", mask_color])
+        mask_shape = getattr(args, "mask_shape", None) or processing.get("mask_shape")
+        if mask_shape:
+            command.extend(["--mask-shape", mask_shape])
+        blur_strength = getattr(args, "blur_strength", None)
+        if blur_strength is None:
+            blur_strength = processing.get("blur_strength")
+        if blur_strength:
+            command.extend(["--blur-strength", str(blur_strength)])
+        blur_sigma = getattr(args, "blur_sigma", None)
+        if blur_sigma is None:
+            blur_sigma = processing.get("blur_sigma")
+        if blur_sigma:
+            command.extend(["--blur-sigma", str(blur_sigma)])
         append_common_processing_options(command, config, args)
     else:
         processing = config["processing"]
@@ -819,6 +844,8 @@ def command_process(args):
         video_output = args.output_dir or processing.get("video_output") or config["paths"].get("video_output")
         if video_output:
             command.extend(["-vo", video_output])
+        if getattr(args, "analyze_only", False):
+            command.append("--analyze-only")
         if args.boxes:
             command.append("-b")
         if args.blur:
@@ -840,12 +867,37 @@ def command_process(args):
         mask_shape = args.mask_shape or processing.get("mask_shape")
         if mask_shape:
             command.extend(["--mask-shape", mask_shape])
+        blur_strength = getattr(args, "blur_strength", None)
+        if blur_strength is None:
+            blur_strength = processing.get("blur_strength")
+        if blur_strength:
+            command.extend(["--blur-strength", str(blur_strength)])
+        blur_sigma = getattr(args, "blur_sigma", None)
+        if blur_sigma is None:
+            blur_sigma = processing.get("blur_sigma")
+        if blur_sigma:
+            command.extend(["--blur-sigma", str(blur_sigma)])
         rule = args.rule or processing.get("rule")
         if rule and rule != "0/0":
             command.extend(["-r", rule])
         fbr = args.full_blur_rule or processing.get("full_blur_rule")
         if fbr:
             command.extend(["-fbr", fbr])
+        if getattr(args, "save_report", False) or processing.get("save_report"):
+            command.append("--save-report")
+        report_formats = getattr(args, "report_formats", None) or processing.get("report_formats")
+        if report_formats:
+            command.extend(["--report-formats", str(report_formats)])
+        export_markers = getattr(args, "export_markers", None)
+        if export_markers is None:
+            export_markers = processing.get("export_markers")
+        if export_markers:
+            command.extend(["--export-markers", str(export_markers)])
+        marker_gap = getattr(args, "marker_gap", None)
+        if marker_gap is None:
+            marker_gap = processing.get("marker_gap")
+        if marker_gap:
+            command.extend(["--marker-gap", str(marker_gap)])
         if args.ffmpeg_path:
             command.extend(["--ffmpeg-path", args.ffmpeg_path])
         append_common_processing_options(command, config, args)
@@ -945,6 +997,13 @@ def interactive_process():
         color=False,
         mask_color=processing.get("mask_color", "0,0,0"),
         mask_shape=processing.get("mask_shape", "rectangle"),
+        blur_strength=processing.get("blur_strength", 23),
+        blur_sigma=processing.get("blur_sigma", 0.0),
+        analyze_only=False,
+        save_report=processing.get("save_report", False),
+        report_formats=processing.get("report_formats", "json,csv"),
+        export_markers=processing.get("export_markers", ""),
+        marker_gap=processing.get("marker_gap", 1.0),
         rule=processing.get("rule", "0/0"),
         full_blur_rule=processing.get("full_blur_rule", ""),
         ffmpeg_path=None,
@@ -954,6 +1013,10 @@ def interactive_process():
         args.blur = prompt_bool("Apply blur/mask to detected regions", default=True)
         output = prompt("Output image path (blank for default)", default="")
         args.output = output or None
+        args.mask_shape = choose_from_values("Mask Shape", ["rectangle", "ellipse", "oval"], default=args.mask_shape, allow_back=False)
+        args.blur_strength = int(prompt("Blur strength", default=str(args.blur_strength or 23)))
+        args.color = prompt_bool("Use solid color instead of blur", default=False)
+        args.mask_color = prompt("Mask color BGR", default=args.mask_color)
         fbr = prompt("Full blur rule count for image (blank for none)", default=args.full_blur_rule)
         args.full_blur_rule = fbr or None
     elif suffix in VIDEO_EXTENSIONS:
@@ -963,21 +1026,31 @@ def interactive_process():
                 ("Processed censored video", "processed"),
                 ("Detection-box video", "boxes"),
                 ("Detection-box video with blur", "boxes_blur"),
+                ("Analyze only, no rendered video", "analyze"),
             ],
             allow_back=False,
         )
+        args.analyze_only = mode == "analyze"
         args.boxes = mode in {"boxes", "boxes_blur"}
         args.blur = mode in {"processed", "boxes_blur"}
         args.with_audio = prompt_bool("Include original audio", default=processing.get("with_audio", False))
         args.delete_frames = prompt_bool("Avoid/delete intermediate frame files", default=True)
         args.enhanced_blur = prompt_bool("Use enhanced blur", default=processing.get("enhanced_blur", False))
         args.color = prompt_bool("Use solid color instead of blur", default=False)
-        args.mask_shape = choose_from_values("Mask Shape", ["rectangle", "ellipse"], default=args.mask_shape, allow_back=False)
+        args.mask_shape = choose_from_values("Mask Shape", ["rectangle", "ellipse", "oval"], default=args.mask_shape, allow_back=False)
         args.mask_color = prompt("Mask color BGR", default=args.mask_color)
+        args.blur_strength = int(prompt("Blur strength", default=str(args.blur_strength or 23)))
         args.codec = choose_from_values("Video Codec", ["mp4v", "avc1", "xvid", "mjpg"], default=args.codec, allow_back=False)
         args.output_dir = prompt("Video output folder", default=processing.get("video_output") or config["paths"].get("video_output", "video_output"))
         args.rule = prompt("Monitor rule percentage/count", default=args.rule)
         args.full_blur_rule = prompt("Full blur rule labels/frames (blank for default)", default=args.full_blur_rule)
+        args.save_report = args.analyze_only or prompt_bool("Write JSON/CSV detection reports", default=processing.get("save_report", False))
+        args.report_formats = prompt("Report formats", default=args.report_formats)
+        args.export_markers = choose_from_values("Marker Export", ["none", "edl", "fcpxml", "both"], default=args.export_markers or "none", allow_back=False)
+        if args.export_markers == "none":
+            args.export_markers = ""
+        if args.export_markers:
+            args.marker_gap = float(prompt("Marker gap seconds", default=str(args.marker_gap or 1.0)))
     else:
         print_error(f"Unsupported input type: {suffix}")
         pause()
@@ -997,9 +1070,15 @@ def interactive_settings():
         ("Video codec", "processing.codec"),
         ("Mask shape", "processing.mask_shape"),
         ("Mask color", "processing.mask_color"),
+        ("Blur strength", "processing.blur_strength"),
+        ("Blur sigma", "processing.blur_sigma"),
         ("Delete frames", "processing.delete_frames"),
         ("Include audio", "processing.with_audio"),
         ("Enhanced blur", "processing.enhanced_blur"),
+        ("Save reports", "processing.save_report"),
+        ("Report formats", "processing.report_formats"),
+        ("Marker export", "processing.export_markers"),
+        ("Marker gap seconds", "processing.marker_gap"),
         ("Input folder", "paths.input"),
         ("Video output folder", "paths.video_output"),
         ("Screen guard monitor", "screen_guard.monitor"),
@@ -1076,9 +1155,15 @@ def interactive_settings():
             if isinstance(current, bool):
                 value = str(prompt_bool(f"Set {key}", default=current)).lower()
             elif key in {"processing.mask_shape", "screen_guard.mask_shape"}:
-                value = choose_from_values("Mask Shape", ["rectangle", "ellipse"], default=current, allow_back=False)
+                value = choose_from_values("Mask Shape", ["rectangle", "ellipse", "oval"], default=current, allow_back=False)
             elif key == "processing.codec":
                 value = choose_from_values("Video Codec", ["mp4v", "avc1", "xvid", "mjpg"], default=current, allow_back=False)
+            elif key == "processing.export_markers":
+                value = choose_from_values("Marker Export", ["none", "edl", "fcpxml", "both"], default=current or "none", allow_back=False)
+                if value == "none":
+                    value = ""
+            elif key == "processing.report_formats":
+                value = choose_from_values("Report Formats", ["json,csv", "json", "csv"], default=current, allow_back=False)
             elif key == "screen_guard.mode":
                 value = choose_from_values("Screen Guard Mode", ["box", "blur", "block", "both", "privacy"], default=current, allow_back=False)
             elif key == "screen_guard.label_filter":
@@ -1387,7 +1472,14 @@ def build_parser():
     process_parser.add_argument("--enhanced-blur", action="store_true")
     process_parser.add_argument("--color", action="store_true", help="Use solid color instead of blur")
     process_parser.add_argument("--mask-color", help="BGR color, e.g. 0,0,0")
-    process_parser.add_argument("--mask-shape", choices=["rectangle", "ellipse"])
+    process_parser.add_argument("--mask-shape", choices=["rectangle", "ellipse", "oval"])
+    process_parser.add_argument("--blur-strength", type=int, help="Regional blur kernel strength")
+    process_parser.add_argument("--blur-sigma", type=float, help="Regional Gaussian blur sigma")
+    process_parser.add_argument("--analyze-only", action="store_true", help="Analyze video without rendering a censored output")
+    process_parser.add_argument("--save-report", action="store_true", help="Write JSON/CSV detection reports")
+    process_parser.add_argument("--report-formats", help="Comma-separated report formats: json,csv")
+    process_parser.add_argument("--export-markers", help="Comma-separated marker formats: edl,fcpxml,both")
+    process_parser.add_argument("--marker-gap", type=float, help="Seconds between detections before a new marker")
     process_parser.add_argument("-r", "--rule", help="Video full blur monitor rule percentage/count")
     process_parser.add_argument("-fbr", "--full-blur-rule", help="Full blur rule")
     process_parser.add_argument("--ffmpeg-path")
