@@ -20,6 +20,7 @@ onnxruntime>=1.10.0
 
 # Progress Bars & CLI Tools
 tqdm>=4.62.0
+colorama>=0.4.6
 
 # ===================
 # GUI Framework

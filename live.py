@@ -15,6 +15,7 @@ import queue
 from pathlib import Path
 import urllib.request
 import math
+from safevision_utils import create_onnx_session, load_blur_exception_rules
 
 # Global variables for ONNX Runtime components
 onnxruntime = None
@@ -472,14 +473,8 @@ class LiveNudeDetector:
                 return
             
             print(f"ONNX Runtime available: {onnxruntime}")
-            available_providers = onnxruntime.get_available_providers() if not providers else providers
-            print(f"Available providers: {available_providers}")
-            
             print("Creating ONNX session...")
-            self.onnx_session = onnxruntime.InferenceSession(
-                model_to_load,
-                providers=available_providers,
-            )
+            self.onnx_session = create_onnx_session(model_to_load, providers=providers)
             print("ONNX session created successfully!")
 
             # Get model input info
@@ -524,39 +519,13 @@ class LiveNudeDetector:
         if not rule_file_path:
             rule_file_path = "BlurException.rule"
             
-        # Define labels locally
-        labels = [
-            "FEMALE_GENITALIA_COVERED", "FACE_FEMALE", "BUTTOCKS_EXPOSED",
-            "FEMALE_BREAST_EXPOSED", "FEMALE_GENITALIA_EXPOSED", "MALE_BREAST_EXPOSED",
-            "ANUS_EXPOSED", "FEET_EXPOSED", "BELLY_COVERED", "FEET_COVERED",
-            "ARMPITS_COVERED", "ARMPITS_EXPOSED", "FACE_MALE", "BELLY_EXPOSED",
-            "MALE_GENITALIA_EXPOSED", "ANUS_COVERED", "FEMALE_BREAST_COVERED",
-            "BUTTOCKS_COVERED"
-        ]
-            
-        # Create default rule file if it doesn't exist
-        if not os.path.exists(rule_file_path):
-            print(f"Creating default blur exception rules at: {rule_file_path}")
-            with open(rule_file_path, "w") as default_rule_file:
-                for label in labels:
-                    default_rule_file.write(f"{label} = true\n")
-
-        # Load rules from file
-        self.blur_exception_rules = {}
         try:
-            with open(rule_file_path, "r") as rule_file:
-                for line in rule_file:
-                    line = line.strip()
-                    if line and '=' in line:
-                        parts = line.split("=", 1)  # Split on first '=' only
-                        if len(parts) == 2:
-                            label, blur = parts[0].strip(), parts[1].strip()
-                            self.blur_exception_rules[label] = blur.lower() == "true"
+            labels = globals()["__labels"]
+            self.blur_exception_rules = load_blur_exception_rules(rule_file_path, labels=labels)
             print(f"Loaded {len(self.blur_exception_rules)} blur exception rules from {rule_file_path}")
         except Exception as e:
             print(f"Error loading blur exception rules: {e}")
-            # Fallback to default rules (blur everything)
-            self.blur_exception_rules = {label: True for label in labels}
+            self.blur_exception_rules = {label: True for label in globals()["__labels"]}
 
     def should_apply_blur(self, label):
         """Check if blur should be applied to this label based on exception rules."""
@@ -698,11 +667,7 @@ class GenderAgeDetector:
                 self.session = None
                 return
                 
-            available_providers = onnxruntime.get_available_providers() if not providers else providers
-            self.session = onnxruntime.InferenceSession(
-                model_path,
-                providers=available_providers,
-            )
+            self.session = create_onnx_session(model_path, providers=providers)
             
             # Get model input info
             inp = self.session.get_inputs()[0]

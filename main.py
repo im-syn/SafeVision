@@ -5,8 +5,15 @@ import numpy as np
 import onnx
 from onnx import version_converter 
 import onnxruntime
-from onnxruntime.capi import _pybind_state as C
 import argparse
+from safevision_utils import (
+    cv2_imread,
+    cv2_imwrite,
+    create_onnx_session,
+    ensure_blur_exception_rules,
+    load_blur_exception_rules,
+    parse_provider_list,
+)
 
 __labels = [
     "FEMALE_GENITALIA_COVERED",
@@ -31,7 +38,9 @@ __labels = [
 
 
 def _read_image(image_path, target_size=320):
-    img = cv2.imread(image_path)
+    img = cv2_imread(image_path)
+    if img is None:
+        raise FileNotFoundError(f"Could not read image: {image_path}")
     img_height, img_width = img.shape[:2]
     img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
 
@@ -159,10 +168,7 @@ class NudeDetector:
         # Convert best.onnx → best_opset15.onnx at runtime
         model_to_load = _ensure_opset15(model_orig)
 
-        self.onnx_session = onnxruntime.InferenceSession(
-            model_to_load,
-            providers=C.get_available_providers() if not providers else providers,
-        )
+        self.onnx_session = create_onnx_session(model_to_load, providers=providers)
         inp = self.onnx_session.get_inputs()[0]
         self.input_name   = inp.name
         self.input_width  = inp.shape[2]
@@ -175,15 +181,8 @@ class NudeDetector:
         if not rule_file_path:
             rule_file_path = "BlurException.rule"
 
-        self.blur_exception_rules = {}
-        with open(rule_file_path, "r") as rule_file:
-            for line in rule_file:
-                parts = line.strip().split("=")
-                if len(parts) == 2:
-                    label, blur = parts[0].strip(), parts[1].strip()
-                    self.blur_exception_rules[label] = blur.lower() == "true"
-        print("Loaded exception rules:")
-        print(self.blur_exception_rules)  # Add this line for debugging
+        self.blur_exception_rules = load_blur_exception_rules(rule_file_path, labels=globals()["__labels"])
+        print(f"Loaded {len(self.blur_exception_rules)} exception rules from {rule_file_path}")
 
 
 
@@ -209,7 +208,9 @@ class NudeDetector:
                 detection for detection in detections if detection["class"] in classes
             ]
 
-        img = cv2.imread(image_path)
+        img = cv2_imread(image_path)
+        if img is None:
+            raise FileNotFoundError(f"Could not read image: {image_path}")
         img_boxes = img.copy()
         img_combined = img.copy()
 
@@ -265,13 +266,13 @@ class NudeDetector:
                 # Apply full blur to the whole image
                 img_blur = cv2.GaussianBlur(img_blur, (23, 23), 30)
 
-            cv2.imwrite(output_path, img_blur)
+            cv2_imwrite(output_path, img_blur)
         else:
             # Save the image with boxes and labels
-            cv2.imwrite(output_path, img_combined)
+            cv2_imwrite(output_path, img_combined)
             # Save the boxes detection image with labels
             detect_path = f"Prosses/{os.path.basename(output_path)}"
-            cv2.imwrite(detect_path, img_boxes)
+            cv2_imwrite(detect_path, img_boxes)
 
         # Create a log file for the image
         log_file_path = f"Logs/{os.path.basename(output_path)}.log"
@@ -312,6 +313,12 @@ def parse_args():
         default=0,
         help="Number of exposed boxes to trigger full image blur",
     )
+    parser.add_argument(
+        "--providers",
+        type=str,
+        default=None,
+        help="Comma-separated ONNX Runtime providers, e.g. CUDAExecutionProvider,CPUExecutionProvider",
+    )
     return parser.parse_args()
 
 
@@ -327,35 +334,12 @@ if __name__ == "__main__":
 
     args = parse_args()
 
-    detector = NudeDetector()
+    detector = NudeDetector(providers=parse_provider_list(args.providers))
     
     # Load exception rules from file
     exception_file_path = args.exception or "BlurException.rule"
 
-    # Check if the exception file exists, if not, create it with default values
-    if not os.path.exists(exception_file_path):
-        with open(exception_file_path, "w") as exception_file:
-            exception_file.write("\n".join([
-                "BELLY_EXPOSED = true",
-                "MALE_GENITALIA_EXPOSED = true",
-                "BUTTOCKS_EXPOSED = true",
-                "FEMALE_BREAST_EXPOSED = true",
-                "FEMALE_GENITALIA_EXPOSED = true",
-                "MALE_BREAST_EXPOSED = true",
-                "ANUS_EXPOSED = true",
-                "FEET_EXPOSED = true",
-                "ARMPITS_EXPOSED = true",
-                "FACE_FEMALE = true",
-                "FACE_MALE = true",
-                "BELLY_COVERED = true",
-                "FEMALE_GENITALIA_COVERED = true",
-                "BUTTOCKS_COVERED = true",
-                "FEET_COVERED = true",
-                "ARMPITS_COVERED = true",
-                "ANUS_COVERED = true",
-                "FEMALE_BREAST_COVERED = true",
-            ]))
-
+    ensure_blur_exception_rules(exception_file_path, labels=__labels)
     detector.load_exception_rules(exception_file_path)
 
     detections = detector.detect(args.input)
@@ -370,11 +354,11 @@ if __name__ == "__main__":
 
     # Process blurred image and save in "Blur" directory
     blur_censored_path = detector.censor(args.input, apply_blur=True, output_path=blur_path, full_blur_rule=args.full_blur_rule)
-    img_blur = cv2.imread(blur_censored_path)
+    img_blur = cv2_imread(blur_censored_path)
 
     # Process non-blurred image and save in "Prosses" directory
     censored_path = detector.censor(args.input, apply_blur=False, output_path=output_path, full_blur_rule=args.full_blur_rule)
-    img_combined = cv2.imread(censored_path)
+    img_combined = cv2_imread(censored_path)
     img_boxes = img_combined.copy()
 
     # Combine both blurred and boxed regions
@@ -391,9 +375,9 @@ if __name__ == "__main__":
             cv2.rectangle(img_boxes, (x, y), (x + w, y + h), (0, 255, 0), 2)
 
     # Save the images
-    cv2.imwrite(output_path, img_combined)
-    cv2.imwrite(blur_path, img_blur)
-    cv2.imwrite(detect_path, img_boxes)
+    cv2_imwrite(output_path, img_combined)
+    cv2_imwrite(blur_path, img_blur)
+    cv2_imwrite(detect_path, img_boxes)
 
     print(f"Censored image saved at: {output_path}")
     print(f"Blur image saved at: {blur_path}")
@@ -409,9 +393,9 @@ if __name__ == "__main__":
         os.makedirs("output", exist_ok=True)
 
         # Save the image with both blur and boxes
-        cv2.imwrite(output_path, img_combined)
-        cv2.imwrite(blur_path, img_blur)
-        cv2.imwrite(detect_path, img_boxes)  # Save the boxes detection image
+        cv2_imwrite(output_path, img_combined)
+        cv2_imwrite(blur_path, img_blur)
+        cv2_imwrite(detect_path, img_boxes)  # Save the boxes detection image
 
         print(f"Censored image saved at: {output_path}")
         print(f"Blur image saved at: {blur_path}")

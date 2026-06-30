@@ -166,6 +166,15 @@ pip install onnxruntime-openvino
 pip install onnxruntime-directml
 ```
 
+SafeVision now chooses ONNX Runtime providers conservatively. CUDA is preferred when available, CPU is kept as a fallback, and TensorRT is disabled by default because it requires extra CUDA/TensorRT shared libraries. To request a provider explicitly:
+
+```bash
+python video.py -i input.mp4 --providers CUDAExecutionProvider,CPUExecutionProvider
+python main.py -i input.jpg --providers CUDAExecutionProvider,CPUExecutionProvider
+```
+
+To opt into TensorRT, install the matching CUDA/TensorRT runtime libraries in the environment and set `SAFEVISION_ENABLE_TENSORRT=1`.
+
 #### FFmpeg Installation (Required for Video Processing)
 ```bash
 # Windows (using chocolatey)
@@ -214,8 +223,52 @@ python live.py --help
 # Test video processing
 python video.py --help
 
+# Test the all-in-one console CLI. Run without args for the interactive menu.
+python safeVisionCLI.py --help
+python safeVisionCLI.py
+
 # Test live streaming
 python live_streamer.py --help
+```
+
+### SafeVision Console CLI
+
+`safeVisionCLI.py` is the recommended control console for non-developers and power users. Run it with no arguments to open a looped row-based menu. It creates `settings/configs.json`, keeps rule profiles, scans media folders, launches GUI/API tools, and routes images/videos to the right processing script.
+
+```bash
+# Open the interactive looped menu
+python safeVisionCLI.py
+
+# First-time setup: create settings/configs.json, folders, and BlurException.rule
+python safeVisionCLI.py init
+
+# Check scripts, folders, active rule profile, and ONNX providers
+python safeVisionCLI.py status
+
+# Scan the input folder for videos and images
+python safeVisionCLI.py scan input --recursive
+
+# Process a video with the active rule profile
+python safeVisionCLI.py process input/1.mp4 --providers CUDAExecutionProvider,CPUExecutionProvider
+
+# Launch the desktop GUI or API/web server when those files exist
+python safeVisionCLI.py launch gui
+python safeVisionCLI.py launch web
+
+# Launch Screen Guard from saved settings/configs.json
+python safeVisionCLI.py screen
+
+# Override saved screen settings for one run
+python safeVisionCLI.py screen -- --mode blur --show-boxes --show-labels --label-filter body
+```
+
+Rule profiles are stored in `settings/configs.json`; activating a profile writes the working `BlurException.rule` file used by the processing scripts:
+
+```bash
+python safeVisionCLI.py rules list
+python safeVisionCLI.py rules use faces_allowed
+python safeVisionCLI.py rules set default FACE_MALE false
+python safeVisionCLI.py rules export default my_profile.rule
 ```
 
 ### 🚨 Common Installation Issues
@@ -224,11 +277,13 @@ python live_streamer.py --help
 ```bash
 # If you get ONNX import errors:
 pip uninstall onnxruntime onnxruntime-gpu
-pip install onnxruntime==1.15.1
+pip install onnxruntime
 
 # For GPU support:
-pip install onnxruntime-gpu==1.15.1
+pip install onnxruntime-gpu
 ```
+
+If a GPU provider cannot load inside Docker or another isolated environment, SafeVision logs the provider error and falls back to CPU instead of crashing. Check `nvidia-smi`, CUDA library availability, and the selected provider list printed at startup.
 
 #### OpenCV Issues
 ```bash
@@ -254,7 +309,10 @@ SafeVision/
 │   ├── main.py                    # Image processing CLI
 │   ├── video.py                   # Video processing CLI
 │   ├── live.py                    # Live camera detection
-│   └── live_streamer.py           # Live streaming integration
+│   ├── live_streamer.py           # Live streaming integration
+│   ├── safeVisionScreenGuard.py   # Desktop screen protection overlay
+│   ├── safeVisionCLI.py           # Interactive console and settings manager
+│   └── safevision_utils.py        # Shared rules, providers, and IO helpers
 │
 ├── 🎨 User Interfaces
 │   ├── safevision_gui.py          # Modern PyQt5 GUI
@@ -264,7 +322,8 @@ SafeVision/
 │   ├── Models/
 │   │   ├── best.onnx             # Main detection model
 │   │   └── best_gender.onnx      # Gender/age model (optional)
-│   ├── BlurException.rule         # Default blur rules
+│   ├── BlurException.rule         # Default blur rules, auto-created if missing
+│   ├── settings/configs.json      # Console settings and rule profiles
 │   └── custom_rules.rule          # Custom rule examples
 │
 ├── 📁 Output Directories (Auto-created)
@@ -499,8 +558,8 @@ python video.py -i input.mp4 -o output.mp4 -t video
 # Enhanced blur with custom rules
 python video.py -i input.mp4 -b --blur --enhanced-blur -fbr 2/10
 
-# Solid color masking instead of blur
-python video.py -i input.mp4 -b --color --mask-color 255,0,0
+# Solid color masking with ellipse regions instead of rectangular blur
+python video.py -i input.mp4 -b --color --mask-color 255,0,0 --mask-shape ellipse
 ```
 
 ### 📋 Command Line Arguments
@@ -521,7 +580,9 @@ python video.py -i input.mp4 -b --color --mask-color 255,0,0
 | `--enhanced-blur` | N/A | `flag` | Stronger censorship blur | False |
 | `--color` | N/A | `flag` | Use solid color masking | False |
 | `--mask-color` | N/A | `str` | Color for masking (BGR: `0,0,255`) | `0,0,0` |
+| `--mask-shape` | N/A | `str` | Regional mask shape: `rectangle` or `ellipse` | `rectangle` |
 | `-fbr` | `--full-blur-rule` | `str` | Full blur trigger: `labels/frames` | `0` |
+| N/A | `--providers` | `str` | Comma-separated ONNX Runtime providers | Auto-select |
 
 ### 🎛️ Processing Modes
 
@@ -612,9 +673,15 @@ python video.py -i video.mp4 --ffmpeg-path /path/to/ffmpeg
 
 #### Large Video Files
 ```bash
-# Use frame deletion to save space
+# Video mode streams directly to the output video and avoids frame JPGs
 python video.py -i large_video.mp4 -df --enhanced-blur
 ```
+
+`-df` no longer waits until the end to clean up frame JPGs in video mode; intermediate frame images are not written in the first place. Use `-t frames` when you intentionally want per-frame image output.
+
+#### Windows Unicode Paths
+
+Image reads and writes use Unicode-safe OpenCV helpers, and video preview/processing has a Windows fallback for paths containing non-ASCII characters or special symbols. If OpenCV cannot open the original video path directly, SafeVision copies the input to a temporary ASCII path for the capture session.
 
 #### Audio Sync Issues
 ```bash
@@ -775,6 +842,90 @@ python live.py --enhanced-blur --auto-record
 python live.py --solid-color --mask-color 0,0,255
 ```
 
+### 🖥️ safeVisionScreenGuard.py - Desktop Screen Guard
+
+**Purpose**: Protect what is currently visible on your desktop without recording. It captures monitor pixels locally with `mss`, runs SafeVision detection, and draws a transparent always-on-top overlay that blocks or outlines detected unsafe regions.
+
+**Basic Usage**: `python safeVisionScreenGuard.py [options]`
+
+| Argument | Type | Default | Description |
+|----------|------|---------|-------------|
+| `--monitor` | `int` | `1` | Monitor number from `--list-monitors` |
+| `--list-monitors` | `flag` | `False` | Print available monitors and exit |
+| `--mode` | `str` | `box` | Base mode: `box`, `blur`, `block`, `both`, or `privacy` |
+| `--fps` | `float` | `5.0` | Detection frames per second |
+| `--threshold` | `float` | `0.35` | Minimum confidence to display/block |
+| `--providers` | `str` | Auto | Comma-separated ONNX Runtime providers |
+| `--rules` | `str` | `BlurException.rule` | Rule file used to decide what is blocked |
+| `--capture-backend` | `str` | `auto` | Pixel capture backend: `auto`, `gdi`, or `mss` |
+| `--smooth-overlay` / `--no-smooth-overlay` | `flag` | `True` | Merge duplicate boxes, smooth jitter, cache blur patches, and skip unchanged redraws |
+| `--smooth-iou` | `float` | `0.45` | Overlap threshold for duplicate merge and tracking |
+| `--smooth-alpha` | `float` | `0.65` | Box follow speed; lower is steadier, higher follows faster |
+| `--track-hold-ms` | `int` | `350` | Keep the last stable region visible through short missed detections |
+| `--merge-nearby` / `--no-merge-nearby` | `flag` | `True` | Combine nearby body-part detections into one continuous protected region |
+| `--merge-distance` | `int` | `140` | Pixel distance for merging nearby detections |
+| `--merge-overlap` | `float` | `0.35` | Merge nested boxes when this much of the smaller box overlaps |
+| `--feedback-safe-capture` / `--no-feedback-safe-capture` | `flag` | `False` | Briefly hide the overlay during screenshots; useful for diagnostics but can visibly blink |
+| `--capture-hide-ms` | `int` | `20` | Milliseconds to hide the overlay during feedback-safe capture |
+| `--drop-stale-on-screen-change` / `--keep-stale-regions` | `flag` | Drop stale | Remove held boxes immediately when the screen under them changes |
+| `--stale-region-delta` | `float` | `10.0` | Pixel-change threshold used to release stale held boxes |
+| `--screen-change-delta` | `float` | `28.0` | Whole-screen change threshold used to release stale held boxes |
+| `--exclude-overlay-capture` / `--allow-overlay-capture` | `flag` | Exclude | Prevent the guard capture from seeing its own overlay on Windows |
+| `--label-filter` | `str` | `exposed` | `exposed`, `body`, or `all` labels |
+| `--respect-rules` / `--ignore-rules` | `flag` | Respect | Apply or bypass `BlurException.rule` |
+| `--show-boxes` / `--no-boxes` | `flag` | Mode-based | Show or hide detection outlines |
+| `--labels`, `--show-labels`, `--no-labels` | `flag` | `False` | Show or hide labels and confidence |
+| `--blur` / `--no-blur` | `flag` | Mode-based | Draw localized blurred live screen patches |
+| `--block-enabled` / `--no-block` | `flag` | Mode-based | Fill detected regions with a solid color |
+| `--privacy-on-detection` / `--no-privacy` | `flag` | Mode-based | Cover the whole monitor on detection |
+| `--blur-style` | `str` | `gaussian` | `gaussian` or `pixelate` localized blur |
+| `--blur-strength` | `int` | `45` | Local blur or pixelation strength |
+| `--mask-shape` | `str` | `rectangle` | `rectangle` or `ellipse` overlays |
+| `--show-status` | `flag` | `False` | Show a small status HUD |
+| `--no-click-through` | `flag` | `False` | Let overlay receive Escape/key input |
+
+**Examples**:
+```bash
+# Show available monitors
+python safeVisionScreenGuard.py --list-monitors
+
+# Draw boxes around detected exposed regions on monitor 1
+python safeVisionScreenGuard.py --monitor 1 --mode box
+
+# Draw boxes and labels for exposed and covered body labels
+python safeVisionScreenGuard.py --monitor 1 --mode box --label-filter body --show-labels --show-status
+
+# Blur only detected regions while keeping the rest of the screen normal
+python safeVisionScreenGuard.py --monitor 1 --mode blur --show-boxes --label-filter exposed
+
+# Make one continuous stable box for body detections
+python safeVisionScreenGuard.py --monitor 1 --mode blur --show-boxes --show-labels --label-filter body --track-hold-ms 350 --merge-distance 140
+
+# Disable the default smoothing/debug the raw overlay behavior
+python safeVisionScreenGuard.py --monitor 1 --mode blur --show-boxes --no-smooth-overlay
+
+# Test detections without BlurException.rule hiding skipped labels
+python safeVisionScreenGuard.py --monitor 1 --mode box --all-labels --ignore-rules --show-labels
+
+# Cover the whole screen whenever unsafe content is detected
+python safeVisionScreenGuard.py --monitor 1 --mode privacy
+
+# Launch from the console app using settings/configs.json
+python safeVisionCLI.py screen
+
+# Change persistent Screen Guard settings from CLI
+python safeVisionCLI.py settings set screen_guard.mode blur
+python safeVisionCLI.py settings set screen_guard.show_labels true
+python safeVisionCLI.py settings set screen_guard.label_filter body
+python safeVisionCLI.py settings set screen_guard.smooth_overlay false
+python safeVisionCLI.py settings set screen_guard.track_hold_ms 350
+python safeVisionCLI.py settings set screen_guard.merge_distance 140
+python safeVisionCLI.py settings set screen_guard.feedback_safe_capture false
+python safeVisionCLI.py settings set screen_guard.drop_stale_on_screen_change true
+```
+
+OBS is not required for screen guard mode. If OBS WebSocket refuses connection in `live_streamer.py`, start OBS and enable WebSocket, or use `safeVisionScreenGuard.py` for direct desktop protection.
+
 ### 🎮 live_streamer.py - Streaming Edition
 
 **Purpose**: Professional streaming solution with OBS integration, virtual camera, and advanced streaming features.
@@ -834,12 +985,17 @@ python live_streamer.py --resolution 1280x720 --fps 30
 | `HOST` | `0.0.0.0` | Server host address (0.0.0.0 = all interfaces) |
 | `PORT` | `5000` | Server port number |
 | `MAX_CONTENT_LENGTH` | `50MB` | Maximum file upload size |
+| `MAX_URL_DOWNLOAD_SIZE` | `50MB` | Maximum remote media URL download size |
 | `DEFAULT_THRESHOLD` | `0.25` | Default detection confidence threshold |
+| `DEFAULT_VIDEO_MAX_FRAMES` | `60` | Maximum sampled frames for video URL analysis |
+| `DEFAULT_VIDEO_SAMPLE_SECONDS` | `1.0` | Sample one video frame every N seconds by default |
 
 **Available Endpoints**:
 - `GET /api/v1/health` - Health check and status
 - `POST /api/v1/detect` - Image detection (multipart/form-data)
 - `POST /api/v1/detect/base64` - Image detection (base64 JSON)
+- `GET /api/v1/detect/url?url=...` - Detect image or video from an HTTP/HTTPS media URL
+- `GET /api/v1/detect/media?url=...` - Alias for URL-based media detection
 - `GET /api/v1/labels` - Available detection labels
 - `GET /api/v1/stats` - API usage statistics
 
@@ -850,7 +1006,16 @@ python safevision_api.py
 
 # Test with curl
 curl -X GET http://localhost:5000/api/v1/health
-curl -X POST -F "image=@test.jpg" http://localhost:5000/api/v1/detect
+curl -X POST -F "file=@test.jpg" http://localhost:5000/api/v1/detect
+
+# Detect an image URL
+curl "http://localhost:5000/api/v1/detect/url?url=https://example.com/image.jpg&threshold=0.3"
+
+# Detect a video URL. Default scans sampled frames and returns media.is_video=true.
+curl "http://localhost:5000/api/v1/detect/url?url=https://example.com/video.mp4&max_frames=30&sample_seconds=1"
+
+# Force a full video frame scan when you need maximum coverage.
+curl "http://localhost:5000/api/v1/detect/url?url=https://example.com/video.mp4&full_scan=true"
 ```
 
 ### 🖥️ safevision_gui.py - GUI Application

@@ -5,7 +5,6 @@ import numpy as np
 import onnx
 from onnx import version_converter 
 import onnxruntime
-from onnxruntime.capi import _pybind_state as C
 import argparse
 import time
 from tqdm import tqdm
@@ -17,6 +16,13 @@ import zipfile
 import urllib.request
 import tempfile
 from pathlib import Path
+from safevision_utils import (
+    cv2_imwrite,
+    create_onnx_session,
+    load_blur_exception_rules,
+    open_video_capture,
+    parse_provider_list,
+)
 
 # Configuration variables - adjust these for different visual effects
 CONFIG = {
@@ -50,6 +56,7 @@ CONFIG = {
     # Solid color mask (alternative to blur)
     'USE_SOLID_COLOR': False,              # When True, uses solid color instead of blur
     'SOLID_COLOR': (0, 0, 0),              # BGR color for masking (black by default)
+    'MASK_SHAPE': 'rectangle',             # Region mask shape: rectangle or ellipse
     
     # Output naming
     'OUTPUT_VIDEO_SUFFIX': '_processed.mp4',
@@ -90,7 +97,10 @@ def process_frames(video_path, detector, output_folder):
     censor/save each frame to output_folder.
     """
     import os
-    cap = cv2.VideoCapture(video_path)
+    output_folder = output_folder or "output_frames"
+    cap = open_video_capture(video_path)
+    if not cap.isOpened():
+        raise FileNotFoundError(f"Could not open video: {video_path}")
     os.makedirs(output_folder, exist_ok=True)
     frame_idx = 0
 
@@ -272,10 +282,7 @@ class NudeDetector:
         # 2) convert/downgrade to opset15 on first run
         model_to_load = _ensure_opset15(model_orig)
         # 3) now load the compatible model
-        self.onnx_session = onnxruntime.InferenceSession(
-            model_to_load,
-            providers=C.get_available_providers() if not providers else providers,
-        )
+        self.onnx_session = create_onnx_session(model_to_load, providers=providers)
 
         # 4) pull out input shape & name as before
         inp = self.onnx_session.get_inputs()[0]
@@ -289,17 +296,9 @@ class NudeDetector:
     def load_exception_rules(self, rule_file_path):
         if not rule_file_path:
             rule_file_path = "BlurException.rule"
-            with open(rule_file_path, "w") as default_rule_file:
-                for label in __labels:
-                    default_rule_file.write(f"{label} = true\n")
 
-        self.blur_exception_rules = {}
-        with open(rule_file_path, "r") as rule_file:
-            for line in rule_file:
-                parts = line.strip().split("=")
-                if len(parts) == 2:
-                    label, blur = parts[0].strip(), parts[1].strip()
-                    self.blur_exception_rules[label] = blur.lower() == "true"
+        self.blur_exception_rules = load_blur_exception_rules(rule_file_path, labels=globals()["__labels"])
+        print(f"Loaded {len(self.blur_exception_rules)} exception rules from {rule_file_path}")
 
     def should_apply_blur(self, label):
         return self.blur_exception_rules.get(label, True)
@@ -313,7 +312,32 @@ class NudeDetector:
 
         return detections
 
-    def censor_frame(self, frame, detections, output_path, nsfw_percentage=None, force_full_blur=False):
+    def apply_region_censor(self, image, x, y, w, h, blur_kernel):
+        image_height, image_width = image.shape[:2]
+        x1 = max(0, x)
+        y1 = max(0, y)
+        x2 = min(image_width, x + w)
+        y2 = min(image_height, y + h)
+        if x2 <= x1 or y2 <= y1:
+            return
+
+        roi = image[y1:y2, x1:x2]
+        roi_height, roi_width = roi.shape[:2]
+        if CONFIG['USE_SOLID_COLOR']:
+            censored_roi = np.full((roi_height, roi_width, 3), CONFIG['SOLID_COLOR'], dtype=np.uint8)
+        else:
+            censored_roi = cv2.GaussianBlur(roi, (blur_kernel[0], blur_kernel[1]), blur_kernel[2])
+
+        if CONFIG.get('MASK_SHAPE') == 'ellipse':
+            mask = np.zeros((roi_height, roi_width), dtype=np.uint8)
+            center = (roi_width // 2, roi_height // 2)
+            axes = (max(1, roi_width // 2), max(1, roi_height // 2))
+            cv2.ellipse(mask, center, axes, 0, 0, 360, 255, -1)
+            roi[mask > 0] = censored_roi[mask > 0]
+        else:
+            image[y1:y2, x1:x2] = censored_roi
+
+    def censor_frame(self, frame, detections, output_path, nsfw_percentage=None, force_full_blur=False, save_frame=True):
         img_boxes = frame.copy()
         img_combined = frame.copy()
 
@@ -377,42 +401,30 @@ class NudeDetector:
                 else:
                     blur_kernel = CONFIG['BLUR_STRENGTH_HIGH'] if is_exposed else CONFIG['BLUR_STRENGTH_NORMAL']
 
-                if 0 <= y < frame.shape[0] and 0 <= x < frame.shape[1] and 0 <= y + h < frame.shape[0] and 0 <= x + w < frame.shape[1]:
+                x1 = max(0, x)
+                y1 = max(0, y)
+                x2 = min(frame.shape[1], x + w)
+                y2 = min(frame.shape[0], y + h)
+
+                if x2 > x1 and y2 > y1:
                     if is_exposed and self.should_apply_blur(label):
-                        # Check if we should use solid color instead of blur
-                        if CONFIG['USE_SOLID_COLOR']:
-                            # Apply solid color mask
-                            img_combined[y:y + h, x:x + w] = np.full(
-                                (h, w, 3), CONFIG['SOLID_COLOR'], dtype=np.uint8
-                            )
-                            # Also update the original frame for video output
-                            frame[y:y + h, x:x + w] = np.full(
-                                (h, w, 3), CONFIG['SOLID_COLOR'], dtype=np.uint8
-                            )
-                        else:
-                            # Apply blur with configured strength
-                            img_combined[y:y + h, x:x + w] = cv2.GaussianBlur(img_combined[y:y + h, x:x + w], 
-                                                                       (blur_kernel[0], blur_kernel[1]), 
-                                                                       blur_kernel[2])
-                            # Also update the original frame for video output
-                            frame[y:y + h, x:x + w] = cv2.GaussianBlur(frame[y:y + h, x:x + w], 
-                                                                     (blur_kernel[0], blur_kernel[1]), 
-                                                                     blur_kernel[2])
+                        self.apply_region_censor(img_combined, x, y, w, h, blur_kernel)
+                        self.apply_region_censor(frame, x, y, w, h, blur_kernel)
                     else:
-                        cv2.rectangle(img_boxes, (x, y), (x + w, y + h), box_color, 2)
-                        cv2.putText(img_boxes, label_text, (x, y - 5), font, font_scale, text_color, font_thickness, cv2.LINE_AA)
+                        cv2.rectangle(img_boxes, (x1, y1), (x2, y2), box_color, 2)
+                        cv2.putText(img_boxes, label_text, (x1, max(0, y1 - 5)), font, font_scale, text_color, font_thickness, cv2.LINE_AA)
                 else:
                     cv2.rectangle(img_boxes, (x, y), (x + w, y + h), box_color, 2)
                     cv2.putText(img_boxes, label_text, (x, y - 5), font, font_scale, text_color, font_thickness, cv2.LINE_AA)
 
                 # Always draw boxes and labels on combined image
-                cv2.rectangle(img_combined, (x, y), (x + w, y + h), box_color, 2)
-                cv2.putText(img_combined, label_text, (x, y - 5), font, font_scale, text_color, font_thickness, cv2.LINE_AA)
+                if x2 > x1 and y2 > y1:
+                    cv2.rectangle(img_combined, (x1, y1), (x2, y2), box_color, 2)
+                    cv2.putText(img_combined, label_text, (x1, max(0, y1 - 5)), font, font_scale, text_color, font_thickness, cv2.LINE_AA)
 
-        # Save frames to the "output_frames" folder instead of the provided output path
-        output_path = os.path.join("output_frames", f"{os.path.basename(output_path)}")
-        cv2.imwrite(output_path, img_combined)
-        cv2.imwrite(f"{output_path}_boxes.jpg", img_boxes)
+        if save_frame and output_path:
+            cv2_imwrite(output_path, img_combined)
+            cv2_imwrite(f"{output_path}_boxes.jpg", img_boxes)
 
        # print(f"Processed frame {output_path}")
         
@@ -430,10 +442,10 @@ class NudeDetector:
         for frame, detections, output_path in frame_list:
             if exposed_percentage >= nsfw_percentage:
                 # Apply full blur to the whole image if the condition is met
-                self.censor_frame(frame, detections, output_path, nsfw_percentage=100)
+                self.censor_frame(frame, detections, output_path, nsfw_percentage=100, save_frame=False)
             else:
                 # Blur individual frames based on the NSFW content
-                self.censor_frame(frame, detections, output_path, nsfw_percentage=nsfw_percentage)
+                self.censor_frame(frame, detections, output_path, nsfw_percentage=nsfw_percentage, save_frame=False)
 
         print(f"Exposure percentage: {exposed_percentage}%")
         
@@ -447,7 +459,9 @@ class NudeVideoProcessor:
     def __init__(self, video_path, output_folder, task="video", providers=None, video_output_folder="video_output", blur_rule=0.5):
         self.task = task.lower()
         self.video_path = video_path
-        self.cap = cv2.VideoCapture(video_path)
+        self.cap = open_video_capture(video_path)
+        if not self.cap.isOpened():
+            raise FileNotFoundError(f"Could not open video: {video_path}")
         self.frame_width = int(self.cap.get(3))
         self.frame_height = int(self.cap.get(4))
 
@@ -474,33 +488,111 @@ class NudeVideoProcessor:
         global args
 
     def process_video(self):
+        self.original_video_path = self.video_path
+
+        if self.task == "frames":
+            self._process_frames_task()
+            return
+
+        if args and hasattr(args, 'boxes') and args.boxes:
+            self._process_boxes_video_stream(include_blur=hasattr(args, 'blur') and args.blur)
+        else:
+            self._process_video_stream()
+
+    def _frame_output_path(self, frame_count):
+        return os.path.join(self.output_folder, f"frame_{frame_count}.jpg")
+
+    def _empty_video_stats(self):
+        return {
+            "total_frames": 0,
+            "total_exposed_boxes": 0,
+            "frames_with_exposed": 0,
+            "frames_with_required_labels": 0,
+        }
+
+    def _update_video_stats(self, stats, detections):
+        exposed_count = self.check_exposed_count(detections)
+        stats["total_frames"] += 1
+        stats["total_exposed_boxes"] += exposed_count
+        if exposed_count > 0:
+            stats["frames_with_exposed"] += 1
+        if exposed_count >= CONFIG['FULL_BLUR_LABELS']:
+            stats["frames_with_required_labels"] += 1
+        return exposed_count
+
+    def _should_apply_full_blur_from_stats(self, stats):
+        total_frames = stats["total_frames"]
+        if total_frames <= 0:
+            return False, "", 0
+
+        frames_with_exposed = stats["frames_with_exposed"]
+        nsfw_percentage = frames_with_exposed / total_frames * 100
+        blur_rule_percentage, blur_rule_count = self.blur_rule
+        threshold_percentage = blur_rule_percentage if blur_rule_percentage > 0 else CONFIG['MONITOR_THRESHOLD_PERCENT']
+        threshold_count = blur_rule_count if blur_rule_count > 0 else CONFIG['MONITOR_THRESHOLD_COUNT']
+
+        print(f"\nFull blur analysis: {stats['frames_with_required_labels']} frames with {CONFIG['FULL_BLUR_LABELS']}+ exposed labels")
+        print(f"Full blur threshold: {CONFIG['FULL_BLUR_FRAMES']} frames")
+
+        if nsfw_percentage >= threshold_percentage:
+            return True, f"NSFW content ({nsfw_percentage:.1f}%) exceeds threshold ({threshold_percentage}%)", nsfw_percentage
+        if frames_with_exposed >= threshold_count:
+            return True, f"Frames with exposed content ({frames_with_exposed}) exceeds threshold ({threshold_count})", nsfw_percentage
+        if stats["frames_with_required_labels"] >= CONFIG['FULL_BLUR_FRAMES']:
+            return True, (
+                f"{stats['frames_with_required_labels']} frames with {CONFIG['FULL_BLUR_LABELS']}+ exposed labels "
+                f"(threshold: {CONFIG['FULL_BLUR_FRAMES']} frames)"
+            ), nsfw_percentage
+        if CONFIG['FULL_BLUR_FRAMES'] == 1 and stats["frames_with_required_labels"] > 0:
+            return True, f"Found {stats['frames_with_required_labels']} frames with {CONFIG['FULL_BLUR_LABELS']}+ exposed labels", nsfw_percentage
+
+        return False, "", nsfw_percentage
+
+    def _process_frames_task(self):
         frame_count = 0
-        frame_list = []
-        exposed_count = 0
-        self.original_video_path = self.video_path  # Store original video path for audio extraction
+        total_frames = int(self.cap.get(cv2.CAP_PROP_FRAME_COUNT))
 
-        with tqdm(total=int(self.cap.get(cv2.CAP_PROP_FRAME_COUNT)), desc="Processing Frames", unit="frames", ncols=100, mininterval=0.5) as pbar:
-            while True:
-                ret, frame = self.cap.read()
+        try:
+            with tqdm(total=total_frames if total_frames > 0 else None, desc="Processing Frames", unit="frames", ncols=100, mininterval=0.5) as pbar:
+                while True:
+                    ret, frame = self.cap.read()
+                    if not ret:
+                        break
 
-                if not ret:
-                    break
+                    frame_count += 1
+                    detections = self.detector.detect_frame(frame)
+                    self.detector.censor_frame(frame, detections, self._frame_output_path(frame_count), save_frame=True)
+                    pbar.update(1)
+        finally:
+            self.cap.release()
 
-                frame_count += 1
-                detections = self.detector.detect_frame(frame)
-                output_path = os.path.join(self.output_folder, f"frame_{frame_count}.jpg")
+    def _process_video_stream(self):
+        codec_preference = args.codec if args and hasattr(args, 'codec') else "mp4v"
+        output_filename = f"{self.input_filename}{CONFIG['OUTPUT_VIDEO_SUFFIX']}"
+        output_path = os.path.join(self.video_output_folder, output_filename)
+        total_frames = int(self.cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        stats = self._empty_video_stats()
+        frame_count = 0
+        out = None
 
-                if self.task == "frames":
-                    self.detector.censor_frame(frame, detections, output_path)
-                else:
-                    frame_list.append((frame.copy(), detections, output_path))
-                    
-                    # Count frames with exposed content (for monitoring)
-                    frame_exposed_count = self.check_exposed_count(detections)
-                    if frame_exposed_count > 0:
-                        exposed_count += 1  # Count frames with any exposed content
-                    
-                    # Log detection information for debugging
+        try:
+            with tqdm(total=total_frames if total_frames > 0 else None, desc="Processing Video", unit="frames", ncols=100, mininterval=0.5) as pbar:
+                while True:
+                    ret, frame = self.cap.read()
+                    if not ret:
+                        break
+
+                    frame_count += 1
+                    if out is None:
+                        height, width = frame.shape[:2]
+                        out = create_safe_video_writer(output_path, width, height, self.original_fps, codec_preference)
+                        if not out.isOpened():
+                            print("Failed to create video writer. Check your codec installation.")
+                            return
+
+                    detections = self.detector.detect_frame(frame)
+                    frame_exposed_count = self._update_video_stats(stats, detections)
+
                     if frame_count % 50 == 0:
                         if frame_exposed_count > 0:
                             exposed_labels = [d["class"] for d in detections if "EXPOSED" in d["class"]]
@@ -508,17 +600,168 @@ class NudeVideoProcessor:
                         if frame_exposed_count >= CONFIG['FULL_BLUR_LABELS']:
                             print(f"Frame {frame_count}: Has {frame_exposed_count} exposed labels (trigger threshold: {CONFIG['FULL_BLUR_LABELS']})")
 
-                pbar.update(1)
+                    frame_to_process = frame.copy()
+                    self.detector.censor_frame(frame_to_process, detections, None, save_frame=False)
+                    out.write(frame_to_process)
+                    pbar.update(1)
+        finally:
+            if out is not None:
+                out.release()
+            self.cap.release()
 
-        self.cap.release()
+        if frame_count == 0:
+            print("No frames were read from the input video.")
+            return
 
-        if self.task == "video":
-            if args and hasattr(args, 'boxes') and args.boxes:
-                # When -b is specified, create a video with boxes
-                # If --blur is also specified, include blur effect
-                self.create_video_with_boxes(frame_list, include_blur=hasattr(args, 'blur') and args.blur)
+        apply_full_blur, blur_reason, nsfw_percentage = self._should_apply_full_blur_from_stats(stats)
+        if apply_full_blur:
+            print(f"\nWARNING: {blur_reason}")
+            print("Applying full video blur as per monitoring rules")
+            blurred_filename = f"{self.input_filename}_fully_blurred.mp4"
+            blurred_output_path = os.path.join(self.video_output_folder, blurred_filename)
+            if self._create_full_blur_video_stream(blurred_output_path, nsfw_percentage):
+                print(f"Fully blurred video saved to: {blurred_output_path}")
+
+                if args and hasattr(args, 'with_audio') and args.with_audio and os.path.exists(self.video_path):
+                    blurred_audio_filename = f"{self.input_filename}_fully_blurred_with_audio.mp4"
+                    blurred_with_audio = os.path.join(self.video_output_folder, blurred_audio_filename)
+                    success = self.add_audio_to_video(blurred_output_path, self.video_path, blurred_with_audio)
+                    if success:
+                        print(f"Fully blurred video with audio saved to: {blurred_with_audio}")
+
+        if args and hasattr(args, 'with_audio') and args.with_audio and os.path.exists(self.video_path):
+            audio_filename = f"{self.input_filename}{CONFIG['OUTPUT_VIDEO_AUDIO_SUFFIX']}"
+            output_with_audio = os.path.join(self.video_output_folder, audio_filename)
+            success = self.add_audio_to_video(output_path, self.video_path, output_with_audio)
+            if success:
+                print(f"\nVideo with audio saved at: {output_with_audio}")
             else:
-                self.create_video(frame_list, exposed_count, self.blur_rule)
+                print(f"\nFailed to add audio. Video saved at: {output_path}")
+        else:
+            print(f"\nVideo saved at: {output_path}")
+
+        if args and hasattr(args, 'delete_frames') and args.delete_frames:
+            print("No intermediate frame images were written in video mode.")
+
+    def _create_full_blur_video_stream(self, output_path, nsfw_percentage):
+        source = open_video_capture(self.video_path)
+        if not source.isOpened():
+            print(f"Could not reopen video for full blur pass: {self.video_path}")
+            return False
+
+        codec_preference = args.codec if args and hasattr(args, 'codec') else "mp4v"
+        total_frames = int(source.get(cv2.CAP_PROP_FRAME_COUNT))
+        out = None
+
+        try:
+            with tqdm(total=total_frames if total_frames > 0 else None, desc="Applying Full Video Blur", unit="frames", ncols=100, mininterval=0.5) as pbar:
+                while True:
+                    ret, frame = source.read()
+                    if not ret:
+                        break
+                    if out is None:
+                        height, width = frame.shape[:2]
+                        out = create_safe_video_writer(output_path, width, height, self.original_fps, codec_preference)
+                        if not out.isOpened():
+                            print("Failed to create blurred video writer. Continuing with regular output.")
+                            return False
+
+                    blurred_frame = frame.copy()
+                    self.detector.censor_frame(
+                        blurred_frame,
+                        [],
+                        None,
+                        nsfw_percentage=nsfw_percentage,
+                        force_full_blur=True,
+                        save_frame=False,
+                    )
+                    out.write(blurred_frame)
+                    pbar.update(1)
+        finally:
+            if out is not None:
+                out.release()
+            source.release()
+
+        return True
+
+    def _render_boxed_frame(self, frame, detections, include_blur=False):
+        boxed_frame = frame.copy()
+        font = cv2.FONT_HERSHEY_SIMPLEX
+        font_scale = CONFIG['FONT_SCALE']
+        font_thickness = CONFIG['FONT_THICKNESS']
+        height, width = frame.shape[:2]
+
+        for detection in detections:
+            x, y, w, h = detection["box"]
+            label = detection["class"]
+            label_text = label if "EXPOSED" not in label else "Unsafe, " + label
+            is_exposed = "EXPOSED" in label
+            box_color = CONFIG['BOX_COLOR_EXPOSED'] if is_exposed else CONFIG['BOX_COLOR_NORMAL']
+            text_color = CONFIG['TEXT_COLOR_EXPOSED'] if is_exposed else CONFIG['TEXT_COLOR_NORMAL']
+            blur_kernel = CONFIG['BLUR_STRENGTH_HIGH'] if is_exposed else CONFIG['BLUR_STRENGTH_NORMAL']
+
+            x1 = max(0, x)
+            y1 = max(0, y)
+            x2 = min(width, x + w)
+            y2 = min(height, y + h)
+            if x2 <= x1 or y2 <= y1:
+                continue
+
+            if include_blur and is_exposed and self.detector.should_apply_blur(label):
+                self.detector.apply_region_censor(boxed_frame, x, y, w, h, blur_kernel)
+
+            cv2.rectangle(boxed_frame, (x1, y1), (x2, y2), box_color, 2)
+            cv2.putText(boxed_frame, label_text, (x1, max(0, y1 - 5)), font, font_scale, text_color, font_thickness, cv2.LINE_AA)
+
+        return boxed_frame
+
+    def _process_boxes_video_stream(self, include_blur=False):
+        codec_preference = args.codec if args and hasattr(args, 'codec') else "mp4v"
+        boxes_filename = f"{self.input_filename}{CONFIG['OUTPUT_VIDEO_BOXES_SUFFIX']}"
+        video_output_path = os.path.join(self.video_output_folder, boxes_filename)
+        total_frames = int(self.cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        frame_count = 0
+        out = None
+
+        try:
+            with tqdm(total=total_frames if total_frames > 0 else None, desc="Generating Video with Boxes", unit="frames", ncols=100, mininterval=0.5) as pbar:
+                while True:
+                    ret, frame = self.cap.read()
+                    if not ret:
+                        break
+                    frame_count += 1
+                    if out is None:
+                        height, width = frame.shape[:2]
+                        out = create_safe_video_writer(video_output_path, width, height, self.original_fps, codec_preference)
+                        if not out.isOpened():
+                            print("Failed to create video writer. Check your codec installation.")
+                            return
+
+                    detections = self.detector.detect_frame(frame)
+                    out.write(self._render_boxed_frame(frame, detections, include_blur=include_blur))
+                    pbar.update(1)
+        finally:
+            if out is not None:
+                out.release()
+            self.cap.release()
+
+        if frame_count == 0:
+            print("No frames were read from the input video.")
+            return
+
+        if args and hasattr(args, 'with_audio') and args.with_audio and os.path.exists(self.video_path):
+            boxes_audio_filename = f"{self.input_filename}{CONFIG['OUTPUT_VIDEO_BOXES_AUDIO_SUFFIX']}"
+            output_with_audio = os.path.join(self.video_output_folder, boxes_audio_filename)
+            success = self.add_audio_to_video(video_output_path, self.video_path, output_with_audio)
+            if success:
+                print(f"\nVideo with boxes and audio saved at: {output_with_audio}")
+            else:
+                print(f"\nFailed to add audio. Video with boxes saved at: {video_output_path}")
+        else:
+            print(f"\nVideo with boxes saved at: {video_output_path}")
+
+        if args and hasattr(args, 'delete_frames') and args.delete_frames:
+            print("No intermediate frame images were written in video mode.")
 
 
  
@@ -547,7 +790,7 @@ class NudeVideoProcessor:
             for frame, detections, output_path in frame_list:
                 # Create a copy of the frame to avoid modifying the original in frame_list
                 frame_to_process = frame.copy()
-                self.detector.censor_frame(frame_to_process, detections, output_path, nsfw_percentage=exposed_count)
+                self.detector.censor_frame(frame_to_process, detections, output_path, nsfw_percentage=exposed_count, save_frame=False)
                 out.write(frame_to_process)
                 pbar.update(1)
 
@@ -602,8 +845,8 @@ class NudeVideoProcessor:
                         # Create a blurred copy of the frame
                         blurred_frame = frame.copy()
                         # Apply the censor_frame method with force_full_blur=True
-                        self.detector.censor_frame(blurred_frame, detections, output_path, 
-                                                  nsfw_percentage=nsfw_percentage, force_full_blur=True)
+                        self.detector.censor_frame(blurred_frame, detections, output_path,
+                                                  nsfw_percentage=nsfw_percentage, force_full_blur=True, save_frame=False)
                         # Write the fully blurred frame to the output video
                         blurred_out.write(blurred_frame)
                         pbar.update(1)
@@ -623,7 +866,7 @@ class NudeVideoProcessor:
         print("\nCreating standard processed video with individual blur areas...")
         with tqdm(total=total_frames, desc="Censoring Frames", unit="frames", ncols=100, mininterval=0.5, leave=False) as pbar:
             for frame, detections, output_path in frame_list:
-                self.detector.censor_frame(frame, detections, output_path, nsfw_percentage=nsfw_percentage)
+                self.detector.censor_frame(frame, detections, output_path, nsfw_percentage=nsfw_percentage, save_frame=False)
                 pbar.update(1)
 
         # Add audio from the original video if available
@@ -1011,6 +1254,10 @@ def parse_args():
                       help="Use solid color instead of blur to mask NSFW content")
     parser.add_argument("--mask-color", type=str, default="0,0,0", 
                       help="Color to use for masking in BGR format (blue,green,red). Default is black: '0,0,0'")
+    parser.add_argument("--mask-shape", type=str, choices=["rectangle", "ellipse"], default="rectangle",
+                      help="Shape used for regional censoring masks. Default is rectangle.")
+    parser.add_argument("--providers", type=str, default=None,
+                      help="Comma-separated ONNX Runtime providers, e.g. CUDAExecutionProvider,CPUExecutionProvider")
     return parser.parse_args()
 
 # Global args variable for access across classes
@@ -1167,15 +1414,25 @@ if __name__ == "__main__":
                 print(f"Using solid color masking with color: BGR={CONFIG['SOLID_COLOR']}")
         except ValueError:
             print("Invalid color format. Using default black color.")
+
+    CONFIG['MASK_SHAPE'] = args.mask_shape
+    print(f"Using {CONFIG['MASK_SHAPE']} regional mask shape")
     
     # Check if we need FFmpeg for this run
     if args.task == "video" and args.with_audio:
         check_ffmpeg_availability(args.ffmpeg_path)
 
     if args.task == "video":
-        video_processor = NudeVideoProcessor(args.input, args.output, task=args.task, video_output_folder=video_output_folder, blur_rule=rule)
+        video_processor = NudeVideoProcessor(
+            args.input,
+            args.output,
+            task=args.task,
+            providers=parse_provider_list(args.providers),
+            video_output_folder=video_output_folder,
+            blur_rule=rule,
+        )
         video_processor.process_video()
     elif args.task == "frames":
-        detector = NudeDetector()
+        detector = NudeDetector(providers=parse_provider_list(args.providers))
         detector.load_exception_rules("BlurException.rule")
         process_frames(args.input, detector, args.output)

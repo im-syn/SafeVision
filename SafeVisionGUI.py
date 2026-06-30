@@ -10,6 +10,7 @@ import subprocess
 import json
 import glob
 import cv2
+from safevision_utils import cv2_imread, open_video_capture
 from pathlib import Path
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
                             QLabel, QPushButton, QFileDialog, QMessageBox, QProgressBar, 
@@ -78,7 +79,7 @@ class PreviewWidget(QLabel):
             
         # Show first frame as background
         try:
-            cap = cv2.VideoCapture(video_path)
+            cap = open_video_capture(video_path)
             if cap.isOpened():
                 ret, frame = cap.read()
                 if ret:
@@ -233,7 +234,7 @@ class VideoPlayerWidget(QWidget):
     def load_video(self):
         """Load video file and get info."""
         try:
-            self.cap = cv2.VideoCapture(self.video_path)
+            self.cap = open_video_capture(self.video_path)
             if self.cap.isOpened():
                 self.total_frames = int(self.cap.get(cv2.CAP_PROP_FRAME_COUNT))
                 fps = self.cap.get(cv2.CAP_PROP_FPS)
@@ -615,7 +616,7 @@ class EnhancedVideoPlayer(QWidget):
     def load_video(self):
         """Load video file and get info."""
         try:
-            self.cap = cv2.VideoCapture(self.video_path)
+            self.cap = open_video_capture(self.video_path)
             if self.cap.isOpened():
                 self.total_frames = int(self.cap.get(cv2.CAP_PROP_FRAME_COUNT))
                 fps = self.cap.get(cv2.CAP_PROP_FPS)
@@ -1001,7 +1002,7 @@ class MultiPreviewWidget(QWidget):
                 preview.setCursor(Qt.PointingHandCursor)
                 
                 try:
-                    cap = cv2.VideoCapture(file_path)
+                    cap = open_video_capture(file_path)
                     ret, frame = cap.read()
                     if ret:
                         rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
@@ -2747,7 +2748,7 @@ class SafeVisionGUI(QMainWindow):
         
         # Blur options
         blur_group = QGroupBox("Blur Options")
-        blur_group.setFixedHeight(120)  # Fixed height
+        blur_group.setFixedHeight(150)  # Fixed height
         blur_layout = QVBoxLayout(blur_group)
         
         self.enhanced_blur_toggle = ModernToggle("Enhanced Blur (Stronger)")
@@ -2767,6 +2768,18 @@ class SafeVisionGUI(QMainWindow):
         color_layout.addWidget(self.color_button)
         color_layout.addStretch()
         blur_layout.addLayout(color_layout)
+
+        shape_layout = QHBoxLayout()
+        shape_label = QLabel("Mask Shape:")
+        shape_label.setFixedHeight(25)
+        shape_layout.addWidget(shape_label)
+        self.mask_shape_combo = QComboBox()
+        self.mask_shape_combo.addItems(["rectangle", "ellipse"])
+        self.mask_shape_combo.setCurrentText(self.settings.get("mask_shape", "rectangle"))
+        self.mask_shape_combo.setFixedHeight(25)
+        shape_layout.addWidget(self.mask_shape_combo)
+        shape_layout.addStretch()
+        blur_layout.addLayout(shape_layout)
         
         layout.addWidget(blur_group)
         
@@ -3175,7 +3188,7 @@ class SafeVisionGUI(QMainWindow):
             elif file_ext in ['.mp4', '.avi', '.mov', '.mkv', '.wmv']:
                 # Show first frame of video
                 try:
-                    cap = cv2.VideoCapture(file_path)
+                    cap = open_video_capture(file_path)
                     ret, frame = cap.read()
                     if ret:
                         # Convert BGR to RGB
@@ -3281,6 +3294,8 @@ class SafeVisionGUI(QMainWindow):
                 command.append("--color")
                 color = self.color_button.get_color()
                 command.extend(["--mask-color", f"{color[0]},{color[1]},{color[2]}"])
+
+            command.extend(["--mask-shape", self.mask_shape_combo.currentText()])
                 
             # Monitoring rules
             if (self.percent_spin.value() > 0 or self.count_spin.value() > 0) and self.enable_r_param.isChecked():
@@ -3296,10 +3311,6 @@ class SafeVisionGUI(QMainWindow):
             ffmpeg_path = self.ffmpeg_path_edit.text().strip()
             if ffmpeg_path and ffmpeg_path != 'ffmpeg':
                 command.extend(["--ffmpeg-path", ffmpeg_path])
-                
-            # FFmpeg path
-            if self.ffmpeg_path_edit.text().strip():
-                command.extend(["--ffmpeg-path", self.ffmpeg_path_edit.text().strip()])
         else:
             return None
             
@@ -3518,7 +3529,7 @@ class SafeVisionGUI(QMainWindow):
             elif file_ext in ['.mp4', '.avi', '.mov', '.mkv', '.wmv']:
                 # Show first frame of video
                 try:
-                    cap = cv2.VideoCapture(file_path)
+                    cap = open_video_capture(file_path)
                     if cap.isOpened():
                         ret, frame = cap.read()
                         if ret:
@@ -3546,7 +3557,7 @@ class SafeVisionGUI(QMainWindow):
             self.output_log.append_info(f"Loaded file: {filename}")
             if file_ext in ['.jpg', '.jpeg', '.png', '.bmp']:
                 try:
-                    img = cv2.imread(file_path)
+                    img = cv2_imread(file_path)
                     if img is not None:
                         h, w = img.shape[:2]
                         self.output_log.append_colored(f"Image dimensions: {w}x{h}", "#6c757d")
@@ -3554,7 +3565,7 @@ class SafeVisionGUI(QMainWindow):
                     pass
             elif file_ext in ['.mp4', '.avi', '.mov', '.mkv', '.wmv']:
                 try:
-                    cap = cv2.VideoCapture(file_path)
+                    cap = open_video_capture(file_path)
                     if cap.isOpened():
                         fps = cap.get(cv2.CAP_PROP_FPS)
                         frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
@@ -3594,6 +3605,7 @@ class SafeVisionGUI(QMainWindow):
             "delete_frames": True,
             "enhanced_blur": False,
             "solid_color": False,
+            "mask_shape": "rectangle",
             "mask_color": [0, 0, 0],
             "include_audio": False,
             "percent_threshold": 10.0,
@@ -3629,6 +3641,7 @@ class SafeVisionGUI(QMainWindow):
             "delete_frames": self.delete_frames_toggle.isChecked(),
             "enhanced_blur": self.enhanced_blur_toggle.isChecked(),
             "solid_color": self.solid_color_toggle.isChecked(),
+            "mask_shape": self.mask_shape_combo.currentText(),
             "mask_color": self.color_button.get_color(),
             "include_audio": self.include_audio_toggle.isChecked(),
             "percent_threshold": self.percent_spin.value(),

@@ -1,0 +1,12 @@
+__pycache__/
+*.py[cod]
+
+# Runtime/generated artifacts
+Models/*_opset15.onnx
+output_frames/
+video_output/
+video_outputs/
+api_uploads/
+api_outputs/
+api_temp/
+detection_log.json

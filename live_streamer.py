@@ -23,6 +23,7 @@ import subprocess
 import platform
 from collections import defaultdict
 from datetime import datetime
+from safevision_utils import create_onnx_session
 
 # Try to import OBS WebSocket for integration
 try:
@@ -584,19 +585,7 @@ class StreamerDetector:
             return
         
         try:
-            # Load model with optimized settings for streaming
-            providers = onnxruntime.get_available_providers()
-            
-            # Prefer GPU providers for better performance
-            if 'CUDAExecutionProvider' in providers and STREAMER_CONFIG['GPU_ACCELERATION']:
-                providers = ['CUDAExecutionProvider', 'CPUExecutionProvider']
-                print("Using GPU acceleration for AI processing")
-            elif 'DirectMLExecutionProvider' in providers and STREAMER_CONFIG['GPU_ACCELERATION']:
-                providers = ['DirectMLExecutionProvider', 'CPUExecutionProvider']
-                print("Using DirectML acceleration for AI processing")
-            else:
-                providers = ['CPUExecutionProvider']
-                print("Using CPU for AI processing")
+            provider_override = None if STREAMER_CONFIG['GPU_ACCELERATION'] else ['CPUExecutionProvider']
             
             # Session options for performance
             sess_options = onnxruntime.SessionOptions()
@@ -606,10 +595,10 @@ class StreamerDetector:
                 sess_options.intra_op_num_threads = 0  # Use all available threads
                 sess_options.inter_op_num_threads = 0
             
-            self.onnx_session = onnxruntime.InferenceSession(
+            self.onnx_session = create_onnx_session(
                 model_path,
-                providers=providers,
-                sess_options=sess_options
+                providers=provider_override,
+                sess_options=sess_options,
             )
             
             # Get model info
