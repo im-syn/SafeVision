@@ -9,7 +9,8 @@
 ![GUI](https://img.shields.io/badge/GUI-Multiple%20Interfaces-purple)
 
 ---
-
+A free API service of this code: https://rapidapi.com/isynx/api/safevision/playground/apiendpoint_aa3ac8f2-2f16-4797-b1d6-ae13c889de15
+---
 ## Overview
 
 **SafeVision** is a comprehensive, multi-modal content safety suite powered by advanced ONNX deep learning models. This sophisticated system provides real-time nudity detection, content filtering, and automated censoring across images, videos, live streams, and camera feeds. With multiple interfaces including CLI tools, modern GUI applications, live monitoring, streaming integration, and RESTful API endpoints, SafeVision offers enterprise-grade content moderation capabilities for various use cases.
