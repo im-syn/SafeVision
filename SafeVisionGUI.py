@@ -2810,6 +2810,35 @@ class SafeVisionGUI(QMainWindow):
         process_layout.addWidget(self.blur_radio)
         process_layout.addWidget(self.boxes_radio)
         layout.addWidget(process_group)
+
+        # Detector model selection
+        detector_group = QGroupBox("Detector Models")
+        detector_group.setFixedHeight(105)
+        detector_layout = QVBoxLayout(detector_group)
+
+        detector_row = QHBoxLayout()
+        detector_row.addWidget(QLabel("Use:"))
+        self.detectors_combo = QComboBox()
+        self.detectors_combo.addItems(["nude", "objects", "both"])
+        self.detectors_combo.setCurrentText(self.settings.get("detectors", "nude"))
+        self.detectors_combo.setFixedHeight(25)
+        detector_row.addWidget(self.detectors_combo)
+        detector_row.addStretch()
+        detector_layout.addLayout(detector_row)
+
+        threshold_row = QHBoxLayout()
+        threshold_row.addWidget(QLabel("Object Threshold:"))
+        self.object_threshold_spin = QDoubleSpinBox()
+        self.object_threshold_spin.setRange(0.01, 0.99)
+        self.object_threshold_spin.setSingleStep(0.05)
+        self.object_threshold_spin.setDecimals(2)
+        self.object_threshold_spin.setValue(float(self.settings.get("object_threshold", 0.25)))
+        self.object_threshold_spin.setFixedHeight(25)
+        threshold_row.addWidget(self.object_threshold_spin)
+        threshold_row.addStretch()
+        detector_layout.addLayout(threshold_row)
+
+        layout.addWidget(detector_group)
         
         # Blur options
         blur_group = QGroupBox("Blur Options")
@@ -3347,6 +3376,13 @@ class SafeVisionGUI(QMainWindow):
             return None
             
         file_ext = Path(self.current_file).suffix.lower()
+        object_model_path = self.settings.get("object_model", "Models/safety_objects.onnx")
+        object_labels_path = self.settings.get("object_labels", "Models/safety_objects.labels.json")
+        base_dir = Path(__file__).resolve().parent
+        if object_model_path and not os.path.isabs(object_model_path):
+            object_model_path = str(base_dir / object_model_path)
+        if object_labels_path and not os.path.isabs(object_labels_path):
+            object_labels_path = str(base_dir / object_labels_path)
         
         # Determine which script to use
         if file_ext in ['.jpg', '.jpeg', '.png', '.bmp']:
@@ -3359,6 +3395,11 @@ class SafeVisionGUI(QMainWindow):
             
             # Input file
             command.extend(["-i", self.current_file])
+
+            command.extend(["--detectors", self.detectors_combo.currentText()])
+            command.extend(["--object-threshold", str(self.object_threshold_spin.value())])
+            command.extend(["--object-model", object_model_path])
+            command.extend(["--object-labels", object_labels_path])
             
             # Output directory
             if self.output_dir_edit.text().strip():
@@ -3392,6 +3433,11 @@ class SafeVisionGUI(QMainWindow):
             
             # Input file
             command.extend(["-i", self.current_file])
+
+            command.extend(["--detectors", self.detectors_combo.currentText()])
+            command.extend(["--object-threshold", str(self.object_threshold_spin.value())])
+            command.extend(["--object-model", object_model_path])
+            command.extend(["--object-labels", object_labels_path])
             
             # Output directory
             if self.output_dir_edit.text().strip():
@@ -3746,6 +3792,10 @@ class SafeVisionGUI(QMainWindow):
             "delete_frames": True,
             "enhanced_blur": False,
             "solid_color": False,
+            "detectors": "nude",
+            "object_model": "Models/safety_objects.onnx",
+            "object_labels": "Models/safety_objects.labels.json",
+            "object_threshold": 0.25,
             "mask_shape": "rectangle",
             "mask_color": [0, 0, 0],
             "blur_strength": 23,
@@ -3788,6 +3838,10 @@ class SafeVisionGUI(QMainWindow):
             "delete_frames": self.delete_frames_toggle.isChecked(),
             "enhanced_blur": self.enhanced_blur_toggle.isChecked(),
             "solid_color": self.solid_color_toggle.isChecked(),
+            "detectors": self.detectors_combo.currentText(),
+            "object_model": self.settings.get("object_model", "Models/safety_objects.onnx"),
+            "object_labels": self.settings.get("object_labels", "Models/safety_objects.labels.json"),
+            "object_threshold": self.object_threshold_spin.value(),
             "mask_shape": self.mask_shape_combo.currentText(),
             "mask_color": self.color_button.get_color(),
             "blur_strength": self.blur_strength_spin.value(),

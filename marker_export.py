@@ -48,7 +48,10 @@ def detection_events_from_frame(detections, frame_index, fps):
                 "frame": int(frame_index),
                 "time": round(time_seconds, 6),
                 "class": label,
-                "category": detection_category(label),
+                "category": detection.get("category") or detection_category(label),
+                "source": detection.get("source", "nude"),
+                "model": detection.get("model", ""),
+                "censor": bool(detection.get("censor", "EXPOSED" in str(label).upper())),
                 "score": score,
                 "box": [int(value) for value in box],
             }
@@ -88,7 +91,7 @@ def write_json_report(path, events, metadata=None, stats=None):
 
 def write_csv_report(path, events):
     os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
-    fieldnames = ["frame", "time", "class", "category", "score", "x", "y", "w", "h"]
+    fieldnames = ["frame", "time", "class", "category", "source", "model", "censor", "score", "x", "y", "w", "h"]
     with open(path, "w", encoding="utf-8", newline="") as report_file:
         writer = csv.DictWriter(report_file, fieldnames=fieldnames)
         writer.writeheader()
@@ -100,6 +103,9 @@ def write_csv_report(path, events):
                     "time": event.get("time", 0),
                     "class": event.get("class", ""),
                     "category": event.get("category", ""),
+                    "source": event.get("source", ""),
+                    "model": event.get("model", ""),
+                    "censor": "true" if event.get("censor", False) else "false",
                     "score": f"{float(event.get('score', 0.0)):.6f}",
                     "x": x,
                     "y": y,

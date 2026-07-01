@@ -11,12 +11,14 @@ from safevision_utils import (
     cv2_imread,
     cv2_imwrite,
     create_onnx_session,
-    ensure_blur_exception_rules,
+    detection_is_censorable,
     load_blur_exception_rules,
     make_blur_kernel,
     normalize_mask_shape,
     parse_provider_list,
+    parse_detector_selection,
 )
+from object_detector import DEFAULT_OBJECT_LABELS, DEFAULT_OBJECT_MODEL, ObjectContentDetector
 
 __labels = [
     "FEMALE_GENITALIA_COVERED",
@@ -116,8 +118,17 @@ def _postprocess(output, resize_factor, pad_left, pad_top):
         box = boxes[i]
         score = scores[i]
         class_id = class_ids[i]
+        label = __labels[class_id]
         detections.append(
-            {"class": __labels[class_id], "score": float(score), "box": box}
+            {
+                "class": label,
+                "score": float(score),
+                "box": box,
+                "category": "exposed" if "EXPOSED" in label else ("covered" if "COVERED" in label else "face" if label.startswith("FACE_") else "other"),
+                "source": "nude",
+                "model": "safevision_nude",
+                "censor": "EXPOSED" in label,
+            }
         )
 
     return detections
@@ -372,6 +383,30 @@ def parse_args():
         default=None,
         help="Comma-separated ONNX Runtime providers, e.g. CUDAExecutionProvider,CPUExecutionProvider",
     )
+    parser.add_argument(
+        "--detectors",
+        type=str,
+        default="nude",
+        help="Detector set to use: nude, objects, or both. Comma-separated values are accepted.",
+    )
+    parser.add_argument(
+        "--object-model",
+        type=str,
+        default=DEFAULT_OBJECT_MODEL,
+        help="Path to the optional safety-object ONNX model.",
+    )
+    parser.add_argument(
+        "--object-labels",
+        type=str,
+        default=DEFAULT_OBJECT_LABELS,
+        help="Path to the safety-object labels JSON file.",
+    )
+    parser.add_argument(
+        "--object-threshold",
+        type=float,
+        default=0.25,
+        help="Minimum confidence for safety-object detections.",
+    )
     return parser.parse_args()
 
 
@@ -381,6 +416,154 @@ def create_directories():
     os.makedirs("Blur", exist_ok=True)
     os.makedirs("Prosses", exist_ok=True)
     os.makedirs("output", exist_ok=True)
+    os.makedirs("Logs", exist_ok=True)
+
+
+def _parse_bgr_color(value, default=(0, 0, 0)):
+    try:
+        parts = [int(part.strip()) for part in str(value or "").split(",")]
+        if len(parts) == 3:
+            return tuple(max(0, min(255, part)) for part in parts)
+    except ValueError:
+        pass
+    print("Invalid mask color. Using default black.")
+    return default
+
+
+def _run_selected_detectors(image_path, enabled_detectors, providers, object_model, object_labels, object_threshold):
+    detections = []
+    if "nude" in enabled_detectors:
+        detector = NudeDetector(providers=providers)
+        detections.extend(detector.detect(image_path))
+
+    if "objects" in enabled_detectors:
+        object_detector = ObjectContentDetector(
+            model_path=object_model,
+            labels_path=object_labels,
+            providers=providers,
+            threshold=object_threshold,
+        )
+        detections.extend(object_detector.detect_image(image_path))
+
+    return detections
+
+
+def _draw_label(image, text, x, y, color):
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    cv2.putText(image, text, (x, max(12, y - 5)), font, 0.5, color, 1, cv2.LINE_AA)
+
+
+def render_image_outputs(args, detections, rules, blur_kernel, mask_shape, solid_color):
+    img = cv2_imread(args.input)
+    if img is None:
+        raise FileNotFoundError(f"Could not read image: {args.input}")
+
+    img_blur = img.copy()
+    img_boxes = img.copy()
+    img_combined = img.copy()
+    image_height, image_width = img.shape[:2]
+    censorable_count = 0
+    log_data = []
+
+    for detection in detections:
+        x, y, w, h = [int(value) for value in detection.get("box", [0, 0, 0, 0])]
+        x1 = max(0, x)
+        y1 = max(0, y)
+        x2 = min(image_width, x + w)
+        y2 = min(image_height, y + h)
+        if x2 <= x1 or y2 <= y1:
+            continue
+
+        label = detection.get("class", "UNKNOWN")
+        score = float(detection.get("score", 0.0))
+        category = detection.get("category") or ("exposed" if "EXPOSED" in str(label).upper() else "other")
+        source = detection.get("source", "nude")
+        is_censorable = detection_is_censorable(detection)
+        should_blur = rules.get(label, True)
+        color = (0, 0, 255) if is_censorable else (0, 255, 0)
+        label_text = f"{label} {score:.2f}"
+        if is_censorable and "EXPOSED" in str(label).upper():
+            label_text = f"Unsafe, {label} {score:.2f}"
+
+        log_data.append(
+            {
+                "label": label,
+                "score": score,
+                "category": category,
+                "source": source,
+                "box": [x1, y1, x2 - x1, y2 - y1],
+                "censor": is_censorable,
+                "blur": bool(should_blur),
+            }
+        )
+
+        if is_censorable:
+            censorable_count += 1
+
+        if is_censorable and should_blur:
+            apply_region_censor(
+                img_blur,
+                x1,
+                y1,
+                x2 - x1,
+                y2 - y1,
+                blur_kernel=blur_kernel,
+                use_solid_color=args.color,
+                solid_color=solid_color,
+                mask_shape=mask_shape,
+            )
+            if args.blur:
+                apply_region_censor(
+                    img_combined,
+                    x1,
+                    y1,
+                    x2 - x1,
+                    y2 - y1,
+                    blur_kernel=blur_kernel,
+                    use_solid_color=args.color,
+                    solid_color=solid_color,
+                    mask_shape=mask_shape,
+                )
+
+        cv2.rectangle(img_boxes, (x1, y1), (x2, y2), color, 2)
+        _draw_label(img_boxes, label_text, x1, y1, color)
+        cv2.rectangle(img_combined, (x1, y1), (x2, y2), color, 2)
+        _draw_label(img_combined, label_text, x1, y1, color)
+
+    if args.full_blur_rule > 0 and censorable_count >= args.full_blur_rule:
+        if args.color:
+            img_blur[:, :] = solid_color
+            if args.blur:
+                img_combined[:, :] = solid_color
+        else:
+            img_blur = cv2.GaussianBlur(img_blur, (blur_kernel[0], blur_kernel[1]), blur_kernel[2])
+            if args.blur:
+                img_combined = cv2.GaussianBlur(img_combined, (blur_kernel[0], blur_kernel[1]), blur_kernel[2])
+
+    output_path = args.output
+    if not output_path:
+        input_path, ext = os.path.splitext(args.input)
+        suffix = "_Blur" if args.blur else "_Detect"
+        output_path = f"output/{os.path.basename(input_path)}{suffix}{ext}"
+
+    blur_path = f"Blur/{os.path.basename(output_path)}"
+    detect_path = f"Prosses/{os.path.basename(output_path)}"
+    final_image = img_combined if args.blur else img_boxes
+
+    cv2_imwrite(output_path, final_image)
+    cv2_imwrite(blur_path, img_blur)
+    cv2_imwrite(detect_path, img_boxes)
+
+    log_file_path = f"Logs/{os.path.basename(output_path)}.log"
+    with open(log_file_path, "w", encoding="utf-8") as log_file:
+        for item in log_data:
+            log_file.write(
+                f"Label: {item['label']}, Score: {item['score']:.4f}, "
+                f"Category: {item['category']}, Source: {item['source']}, "
+                f"Censor: {item['censor']}, Blur: {item['blur']}, Box: {item['box']}\n"
+            )
+
+    return output_path, blur_path, detect_path
 
 if __name__ == "__main__":
     create_directories()  # Create directories before processing
@@ -388,109 +571,36 @@ if __name__ == "__main__":
     args = parse_args()
     blur_kernel = make_blur_kernel(args.blur_strength, args.blur_sigma)
     mask_shape = normalize_mask_shape(args.mask_shape)
-    solid_color = (0, 0, 0)
-    if args.color:
-        try:
-            color_parts = args.mask_color.split(",")
-            if len(color_parts) == 3:
-                solid_color = (int(color_parts[0]), int(color_parts[1]), int(color_parts[2]))
-        except ValueError:
-            print("Invalid mask color. Using default black.")
+    solid_color = _parse_bgr_color(args.mask_color)
 
     print(f"Using {mask_shape} regional mask shape")
     print(f"Using regional blur kernel: {blur_kernel}")
 
-    detector = NudeDetector(providers=parse_provider_list(args.providers))
-    
-    # Load exception rules from file
+    enabled_detectors = parse_detector_selection(args.detectors)
+    print(f"Enabled detectors: {', '.join(enabled_detectors)}")
+
     exception_file_path = args.exception or "BlurException.rule"
+    rules = load_blur_exception_rules(exception_file_path)
+    providers = parse_provider_list(args.providers)
 
-    ensure_blur_exception_rules(exception_file_path, labels=__labels)
-    detector.load_exception_rules(exception_file_path)
-
-    detections = detector.detect(args.input)
-
-    output_path = args.output
-    if not output_path:
-        input_path, ext = os.path.splitext(args.input)
-        output_path = f"output/{os.path.basename(input_path)}_Output{ext}"
-
-    blur_path = f"Blur/{os.path.basename(output_path)}"
-    detect_path = f"Prosses/{os.path.basename(output_path)}"
-
-    # Process blurred image and save in "Blur" directory
-    blur_censored_path = detector.censor(
+    detections = _run_selected_detectors(
         args.input,
-        apply_blur=True,
-        output_path=blur_path,
-        full_blur_rule=args.full_blur_rule,
-        blur_kernel=blur_kernel,
-        mask_shape=mask_shape,
-        use_solid_color=args.color,
-        solid_color=solid_color,
+        enabled_detectors,
+        providers,
+        args.object_model,
+        args.object_labels,
+        args.object_threshold,
     )
-    img_blur = cv2_imread(blur_censored_path)
+    print(f"Detections found: {len(detections)}")
 
-    # Process non-blurred image and save in "Prosses" directory
-    censored_path = detector.censor(
-        args.input,
-        apply_blur=False,
-        output_path=output_path,
-        full_blur_rule=args.full_blur_rule,
-        blur_kernel=blur_kernel,
-        mask_shape=mask_shape,
-        use_solid_color=args.color,
-        solid_color=solid_color,
+    output_path, blur_path, detect_path = render_image_outputs(
+        args,
+        detections,
+        rules,
+        blur_kernel,
+        mask_shape,
+        solid_color,
     )
-    img_combined = cv2_imread(censored_path)
-    img_boxes = img_combined.copy()
-
-    # Combine both blurred and boxed regions
-    for detection in detections:
-        box = detection["box"]
-        x, y, w, h = box[0], box[1], box[2], box[3]
-        
-        label = detection["class"]
-        should_blur = detector.should_apply_blur(label)  # Checking exception rules
-        
-        if should_blur:
-            apply_region_censor(
-                img_combined,
-                x,
-                y,
-                w,
-                h,
-                blur_kernel=blur_kernel,
-                use_solid_color=args.color,
-                solid_color=solid_color,
-                mask_shape=mask_shape,
-            )
-        else:
-            cv2.rectangle(img_boxes, (x, y), (x + w, y + h), (0, 255, 0), 2)
-
-    # Save the images
-    cv2_imwrite(output_path, img_combined)
-    cv2_imwrite(blur_path, img_blur)
-    cv2_imwrite(detect_path, img_boxes)
-
     print(f"Censored image saved at: {output_path}")
     print(f"Blur image saved at: {blur_path}")
     print(f"Boxes detection image saved at: {detect_path}")
-
-
-    # Check if the image is not empty before saving
-    if not os.path.exists(censored_path) or os.path.getsize(censored_path) == 0:
-        print("Error: Empty or non-existent image.")
-    else:
-        os.makedirs("Blur", exist_ok=True)
-        os.makedirs("Prosses", exist_ok=True)
-        os.makedirs("output", exist_ok=True)
-
-        # Save the image with both blur and boxes
-        cv2_imwrite(output_path, img_combined)
-        cv2_imwrite(blur_path, img_blur)
-        cv2_imwrite(detect_path, img_boxes)  # Save the boxes detection image
-
-        print(f"Censored image saved at: {output_path}")
-        print(f"Blur image saved at: {blur_path}")
-        print(f"Boxes detection image saved at: {detect_path}")

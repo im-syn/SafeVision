@@ -20,12 +20,15 @@ from safevision_utils import (
     apply_region_censor as shared_apply_region_censor,
     cv2_imwrite,
     create_onnx_session,
+    detection_is_censorable,
     load_blur_exception_rules,
     make_blur_kernel,
     normalize_mask_shape,
     open_video_capture,
     parse_provider_list,
+    parse_detector_selection,
 )
+from object_detector import DEFAULT_OBJECT_LABELS, DEFAULT_OBJECT_MODEL, ObjectContentDetector
 from marker_export import (
     detection_events_from_frame,
     export_marker_files,
@@ -197,8 +200,17 @@ def _postprocess(output, resize_factor, pad_left, pad_top):
         box = boxes[i]
         score = scores[i]
         class_id = class_ids[i]
+        label = __labels[class_id]
         detections.append(
-            {"class": __labels[class_id], "score": float(score), "box": box}
+            {
+                "class": label,
+                "score": float(score),
+                "box": box,
+                "category": "exposed" if "EXPOSED" in label else ("covered" if "COVERED" in label else "face" if label.startswith("FACE_") else "other"),
+                "source": "nude",
+                "model": "safevision_nude",
+                "censor": "EXPOSED" in label,
+            }
         )
 
     return detections
@@ -374,8 +386,8 @@ class NudeDetector:
                 box = detection["box"]
                 x, y, w, h = box[0], box[1], box[2], box[3]
                 label = detection["class"]
-                is_exposed = "EXPOSED" in label
-                box_color = CONFIG['BOX_COLOR_EXPOSED'] if is_exposed else CONFIG['BOX_COLOR_NORMAL']
+                is_censorable = detection_is_censorable(detection)
+                box_color = CONFIG['BOX_COLOR_EXPOSED'] if is_censorable else CONFIG['BOX_COLOR_NORMAL']
                 cv2.rectangle(img_boxes, (x, y), (x + w, y + h), box_color, 2)
         else:
             # Normal processing for individual detections
@@ -384,18 +396,18 @@ class NudeDetector:
                 x, y, w, h = box[0], box[1], box[2], box[3]
 
                 label = detection["class"]
-                label_text = label if "EXPOSED" not in label else "Unsafe, " + label
+                is_censorable = detection_is_censorable(detection)
+                label_text = label if not is_censorable else "Unsafe, " + label
                 
                 # Select colors based on content type (exposed or normal)
-                is_exposed = "EXPOSED" in label
-                box_color = CONFIG['BOX_COLOR_EXPOSED'] if is_exposed else CONFIG['BOX_COLOR_NORMAL']
-                text_color = CONFIG['TEXT_COLOR_EXPOSED'] if is_exposed else CONFIG['TEXT_COLOR_NORMAL']
+                box_color = CONFIG['BOX_COLOR_EXPOSED'] if is_censorable else CONFIG['BOX_COLOR_NORMAL']
+                text_color = CONFIG['TEXT_COLOR_EXPOSED'] if is_censorable else CONFIG['TEXT_COLOR_NORMAL']
                 
                 # Select blur strength based on content sensitivity and enhanced blur setting
-                if CONFIG['ENHANCED_BLUR'] and is_exposed:
+                if CONFIG['ENHANCED_BLUR'] and is_censorable:
                     blur_kernel = CONFIG['FULL_BLUR_STRENGTH']  # Use the strongest blur for enhanced mode
                 else:
-                    blur_kernel = CONFIG['BLUR_STRENGTH_HIGH'] if is_exposed else CONFIG['BLUR_STRENGTH_NORMAL']
+                    blur_kernel = CONFIG['BLUR_STRENGTH_HIGH'] if is_censorable else CONFIG['BLUR_STRENGTH_NORMAL']
 
                 x1 = max(0, x)
                 y1 = max(0, y)
@@ -403,7 +415,7 @@ class NudeDetector:
                 y2 = min(frame.shape[0], y + h)
 
                 if x2 > x1 and y2 > y1:
-                    if is_exposed and self.should_apply_blur(label):
+                    if is_censorable and self.should_apply_blur(label):
                         self.apply_region_censor(img_combined, x, y, w, h, blur_kernel)
                         self.apply_region_censor(frame, x, y, w, h, blur_kernel)
                     else:
@@ -446,13 +458,25 @@ class NudeDetector:
         print(f"Exposure percentage: {exposed_percentage}%")
         
     def check_exposed_count(self, detections):
-        exposed_labels = [detection["class"] for detection in detections if "EXPOSED" in detection["class"]]
+        exposed_labels = [detection["class"] for detection in detections if detection_is_censorable(detection)]
         exposed_count = len(exposed_labels)
         return exposed_count
 
 
 class NudeVideoProcessor:
-    def __init__(self, video_path, output_folder, task="video", providers=None, video_output_folder="video_output", blur_rule=0.5):
+    def __init__(
+        self,
+        video_path,
+        output_folder,
+        task="video",
+        providers=None,
+        video_output_folder="video_output",
+        blur_rule=0.5,
+        detectors="nude",
+        object_model=None,
+        object_labels=None,
+        object_threshold=0.25,
+    ):
         self.task = task.lower()
         self.video_path = video_path
         self.cap = open_video_capture(video_path)
@@ -471,8 +495,26 @@ class NudeVideoProcessor:
             self.original_fps = 30.0  # Default to 30 fps if unable to determine
         print(f"Original video FPS: {self.original_fps}")
 
-        self.detector = NudeDetector(providers)
-        self.detector.load_exception_rules("BlurException.rule")
+        self.enabled_detectors = parse_detector_selection(detectors)
+        self.detector = None
+        self.object_detector = None
+        self.blur_exception_rules = load_blur_exception_rules("BlurException.rule")
+
+        if "nude" in self.enabled_detectors:
+            self.detector = NudeDetector(providers)
+            self.detector.load_exception_rules("BlurException.rule")
+
+        if "objects" in self.enabled_detectors:
+            self.object_detector = ObjectContentDetector(
+                model_path=object_model or DEFAULT_OBJECT_MODEL,
+                labels_path=object_labels or DEFAULT_OBJECT_LABELS,
+                providers=providers,
+                threshold=object_threshold,
+            )
+
+        if not self.detector and not self.object_detector:
+            raise ValueError("No detectors enabled. Use --detectors nude, --detectors objects, or --detectors both.")
+        print(f"Enabled detectors: {', '.join(self.enabled_detectors)}")
 
         self.output_folder = output_folder or "output_frames"
         self.video_output_folder = video_output_folder
@@ -482,6 +524,95 @@ class NudeVideoProcessor:
         self.blur_rule = blur_rule
         # Store command line arguments for access within class methods
         global args
+
+    def detect_frame(self, frame):
+        detections = []
+        if self.detector:
+            detections.extend(self.detector.detect_frame(frame))
+        if self.object_detector:
+            detections.extend(self.object_detector.detect_frame(frame))
+        return detections
+
+    def should_apply_blur(self, label):
+        return self.blur_exception_rules.get(label, True)
+
+    def apply_region_censor(self, image, x, y, w, h, blur_kernel):
+        return shared_apply_region_censor(
+            image,
+            x,
+            y,
+            w,
+            h,
+            blur_kernel=blur_kernel,
+            use_solid_color=CONFIG['USE_SOLID_COLOR'],
+            solid_color=CONFIG['SOLID_COLOR'],
+            mask_shape=CONFIG.get('MASK_SHAPE', 'rectangle'),
+        )
+
+    def censor_frame(self, frame, detections, output_path, nsfw_percentage=None, force_full_blur=False, save_frame=True):
+        img_boxes = frame.copy()
+        img_combined = frame.copy()
+        font = cv2.FONT_HERSHEY_SIMPLEX
+        font_scale = CONFIG['FONT_SCALE']
+        font_thickness = CONFIG['FONT_THICKNESS']
+
+        if force_full_blur:
+            if CONFIG['USE_SOLID_COLOR']:
+                height, width = img_combined.shape[:2]
+                img_combined = np.full((height, width, 3), CONFIG['SOLID_COLOR'], dtype=np.uint8)
+                frame[:] = np.full((height, width, 3), CONFIG['SOLID_COLOR'], dtype=np.uint8)
+            else:
+                img_combined = cv2.GaussianBlur(
+                    img_combined,
+                    (CONFIG['FULL_BLUR_STRENGTH'][0], CONFIG['FULL_BLUR_STRENGTH'][1]),
+                    CONFIG['FULL_BLUR_STRENGTH'][2],
+                )
+                frame[:] = cv2.GaussianBlur(
+                    frame,
+                    (CONFIG['FULL_BLUR_STRENGTH'][0], CONFIG['FULL_BLUR_STRENGTH'][1]),
+                    CONFIG['FULL_BLUR_STRENGTH'][2],
+                )
+
+            warning_text = "Content Filtered - Excessive Unsafe Content"
+            text_size = cv2.getTextSize(warning_text, font, 1.0, 2)[0]
+            text_x = (img_combined.shape[1] - text_size[0]) // 2
+            text_y = (img_combined.shape[0] + text_size[1]) // 2
+            cv2.putText(img_combined, warning_text, (text_x, text_y), font, 1.0, (0, 0, 255), 2, cv2.LINE_AA)
+            cv2.putText(frame, warning_text, (text_x, text_y), font, 1.0, (0, 0, 255), 2, cv2.LINE_AA)
+
+        else:
+            frame_height, frame_width = frame.shape[:2]
+            for detection in detections:
+                x, y, w, h = [int(value) for value in detection.get("box", [0, 0, 0, 0])]
+                x1 = max(0, x)
+                y1 = max(0, y)
+                x2 = min(frame_width, x + w)
+                y2 = min(frame_height, y + h)
+                if x2 <= x1 or y2 <= y1:
+                    continue
+
+                label = detection.get("class", "UNKNOWN")
+                is_censorable = detection_is_censorable(detection)
+                label_text = label if not is_censorable else "Unsafe, " + label
+                box_color = CONFIG['BOX_COLOR_EXPOSED'] if is_censorable else CONFIG['BOX_COLOR_NORMAL']
+                text_color = CONFIG['TEXT_COLOR_EXPOSED'] if is_censorable else CONFIG['TEXT_COLOR_NORMAL']
+                if CONFIG['ENHANCED_BLUR'] and is_censorable:
+                    blur_kernel = CONFIG['FULL_BLUR_STRENGTH']
+                else:
+                    blur_kernel = CONFIG['BLUR_STRENGTH_HIGH'] if is_censorable else CONFIG['BLUR_STRENGTH_NORMAL']
+
+                if is_censorable and self.should_apply_blur(label):
+                    self.apply_region_censor(img_combined, x1, y1, x2 - x1, y2 - y1, blur_kernel)
+                    self.apply_region_censor(frame, x1, y1, x2 - x1, y2 - y1, blur_kernel)
+
+                cv2.rectangle(img_boxes, (x1, y1), (x2, y2), box_color, 2)
+                cv2.putText(img_boxes, label_text, (x1, max(0, y1 - 5)), font, font_scale, text_color, font_thickness, cv2.LINE_AA)
+                cv2.rectangle(img_combined, (x1, y1), (x2, y2), box_color, 2)
+                cv2.putText(img_combined, label_text, (x1, max(0, y1 - 5)), font, font_scale, text_color, font_thickness, cv2.LINE_AA)
+
+        if save_frame and output_path:
+            cv2_imwrite(output_path, img_combined)
+            cv2_imwrite(f"{output_path}_boxes.jpg", img_boxes)
 
     def process_video(self):
         self.original_video_path = self.video_path
@@ -597,7 +728,7 @@ class NudeVideoProcessor:
                     if not width or not height:
                         height, width = frame.shape[:2]
 
-                    detections = self.detector.detect_frame(frame)
+                    detections = self.detect_frame(frame)
                     self._update_video_stats(stats, detections)
                     self._record_detection_events(events, detections, frame_count)
                     pbar.update(1)
@@ -656,8 +787,8 @@ class NudeVideoProcessor:
                         break
 
                     frame_count += 1
-                    detections = self.detector.detect_frame(frame)
-                    self.detector.censor_frame(frame, detections, self._frame_output_path(frame_count), save_frame=True)
+                    detections = self.detect_frame(frame)
+                    self.censor_frame(frame, detections, self._frame_output_path(frame_count), save_frame=True)
                     pbar.update(1)
         finally:
             self.cap.release()
@@ -689,19 +820,19 @@ class NudeVideoProcessor:
                             print("Failed to create video writer. Check your codec installation.")
                             return
 
-                    detections = self.detector.detect_frame(frame)
+                    detections = self.detect_frame(frame)
                     frame_exposed_count = self._update_video_stats(stats, detections)
                     self._record_detection_events(events, detections, frame_count)
 
                     if frame_count % 50 == 0:
                         if frame_exposed_count > 0:
-                            exposed_labels = [d["class"] for d in detections if "EXPOSED" in d["class"]]
-                            print(f"Frame {frame_count}: {frame_exposed_count} exposed regions - {', '.join(exposed_labels)}")
+                            exposed_labels = [d["class"] for d in detections if detection_is_censorable(d)]
+                            print(f"Frame {frame_count}: {frame_exposed_count} censorable regions - {', '.join(exposed_labels)}")
                         if frame_exposed_count >= CONFIG['FULL_BLUR_LABELS']:
-                            print(f"Frame {frame_count}: Has {frame_exposed_count} exposed labels (trigger threshold: {CONFIG['FULL_BLUR_LABELS']})")
+                            print(f"Frame {frame_count}: Has {frame_exposed_count} censorable labels (trigger threshold: {CONFIG['FULL_BLUR_LABELS']})")
 
                     frame_to_process = frame.copy()
-                    self.detector.censor_frame(frame_to_process, detections, None, save_frame=False)
+                    self.censor_frame(frame_to_process, detections, None, save_frame=False)
                     out.write(frame_to_process)
                     pbar.update(1)
         finally:
@@ -769,7 +900,7 @@ class NudeVideoProcessor:
                             return False
 
                     blurred_frame = frame.copy()
-                    self.detector.censor_frame(
+                    self.censor_frame(
                         blurred_frame,
                         [],
                         None,
@@ -796,11 +927,11 @@ class NudeVideoProcessor:
         for detection in detections:
             x, y, w, h = detection["box"]
             label = detection["class"]
-            label_text = label if "EXPOSED" not in label else "Unsafe, " + label
-            is_exposed = "EXPOSED" in label
-            box_color = CONFIG['BOX_COLOR_EXPOSED'] if is_exposed else CONFIG['BOX_COLOR_NORMAL']
-            text_color = CONFIG['TEXT_COLOR_EXPOSED'] if is_exposed else CONFIG['TEXT_COLOR_NORMAL']
-            blur_kernel = CONFIG['BLUR_STRENGTH_HIGH'] if is_exposed else CONFIG['BLUR_STRENGTH_NORMAL']
+            is_censorable = detection_is_censorable(detection)
+            label_text = label if not is_censorable else "Unsafe, " + label
+            box_color = CONFIG['BOX_COLOR_EXPOSED'] if is_censorable else CONFIG['BOX_COLOR_NORMAL']
+            text_color = CONFIG['TEXT_COLOR_EXPOSED'] if is_censorable else CONFIG['TEXT_COLOR_NORMAL']
+            blur_kernel = CONFIG['BLUR_STRENGTH_HIGH'] if is_censorable else CONFIG['BLUR_STRENGTH_NORMAL']
 
             x1 = max(0, x)
             y1 = max(0, y)
@@ -809,8 +940,8 @@ class NudeVideoProcessor:
             if x2 <= x1 or y2 <= y1:
                 continue
 
-            if include_blur and is_exposed and self.detector.should_apply_blur(label):
-                self.detector.apply_region_censor(boxed_frame, x, y, w, h, blur_kernel)
+            if include_blur and is_censorable and self.should_apply_blur(label):
+                self.apply_region_censor(boxed_frame, x, y, w, h, blur_kernel)
 
             cv2.rectangle(boxed_frame, (x1, y1), (x2, y2), box_color, 2)
             cv2.putText(boxed_frame, label_text, (x1, max(0, y1 - 5)), font, font_scale, text_color, font_thickness, cv2.LINE_AA)
@@ -843,7 +974,7 @@ class NudeVideoProcessor:
                             print("Failed to create video writer. Check your codec installation.")
                             return
 
-                    detections = self.detector.detect_frame(frame)
+                    detections = self.detect_frame(frame)
                     self._update_video_stats(stats, detections)
                     self._record_detection_events(events, detections, frame_count)
                     out.write(self._render_boxed_frame(frame, detections, include_blur=include_blur))
@@ -900,7 +1031,7 @@ class NudeVideoProcessor:
             for frame, detections, output_path in frame_list:
                 # Create a copy of the frame to avoid modifying the original in frame_list
                 frame_to_process = frame.copy()
-                self.detector.censor_frame(frame_to_process, detections, output_path, nsfw_percentage=exposed_count, save_frame=False)
+                self.censor_frame(frame_to_process, detections, output_path, nsfw_percentage=exposed_count, save_frame=False)
                 out.write(frame_to_process)
                 pbar.update(1)
 
@@ -955,7 +1086,7 @@ class NudeVideoProcessor:
                         # Create a blurred copy of the frame
                         blurred_frame = frame.copy()
                         # Apply the censor_frame method with force_full_blur=True
-                        self.detector.censor_frame(blurred_frame, detections, output_path,
+                        self.censor_frame(blurred_frame, detections, output_path,
                                                   nsfw_percentage=nsfw_percentage, force_full_blur=True, save_frame=False)
                         # Write the fully blurred frame to the output video
                         blurred_out.write(blurred_frame)
@@ -976,7 +1107,7 @@ class NudeVideoProcessor:
         print("\nCreating standard processed video with individual blur areas...")
         with tqdm(total=total_frames, desc="Censoring Frames", unit="frames", ncols=100, mininterval=0.5, leave=False) as pbar:
             for frame, detections, output_path in frame_list:
-                self.detector.censor_frame(frame, detections, output_path, nsfw_percentage=nsfw_percentage, save_frame=False)
+                self.censor_frame(frame, detections, output_path, nsfw_percentage=nsfw_percentage, save_frame=False)
                 pbar.update(1)
 
         # Add audio from the original video if available
@@ -1030,21 +1161,21 @@ class NudeVideoProcessor:
                     box = detection["box"]
                     x, y, w, h = box[0], box[1], box[2], box[3]
                     label = detection["class"]
-                    label_text = label if "EXPOSED" not in label else "Unsafe, " + label
+                    is_censorable = detection_is_censorable(detection)
+                    label_text = label if not is_censorable else "Unsafe, " + label
                     
                     # Select colors based on content type (exposed or normal)
-                    is_exposed = "EXPOSED" in label
-                    box_color = CONFIG['BOX_COLOR_EXPOSED'] if is_exposed else CONFIG['BOX_COLOR_NORMAL']
-                    text_color = CONFIG['TEXT_COLOR_EXPOSED'] if is_exposed else CONFIG['TEXT_COLOR_NORMAL']
+                    box_color = CONFIG['BOX_COLOR_EXPOSED'] if is_censorable else CONFIG['BOX_COLOR_NORMAL']
+                    text_color = CONFIG['TEXT_COLOR_EXPOSED'] if is_censorable else CONFIG['TEXT_COLOR_NORMAL']
                     
                     # Select blur strength based on content sensitivity
-                    blur_kernel = CONFIG['BLUR_STRENGTH_HIGH'] if is_exposed else CONFIG['BLUR_STRENGTH_NORMAL']
+                    blur_kernel = CONFIG['BLUR_STRENGTH_HIGH'] if is_censorable else CONFIG['BLUR_STRENGTH_NORMAL']
 
                     # Make sure coordinates are within bounds
                     if 0 <= y < frame.shape[0] and 0 <= x < frame.shape[1] and 0 <= y + h < frame.shape[0] and 0 <= x + w < frame.shape[1]:
                         # Apply blur or solid color if needed
-                        if include_blur and is_exposed and self.detector.should_apply_blur(label):
-                            self.detector.apply_region_censor(boxed_frame, x, y, w, h, blur_kernel)
+                        if include_blur and is_censorable and self.should_apply_blur(label):
+                            self.apply_region_censor(boxed_frame, x, y, w, h, blur_kernel)
                         
                         # Always draw the box and label
                         cv2.rectangle(boxed_frame, (x, y), (x + w, y + h), box_color, 2)
@@ -1209,7 +1340,7 @@ class NudeVideoProcessor:
         Count the number of exposed regions in the detections.
         Returns the count of exposed labels.
         """
-        exposed_labels = [detection["class"] for detection in detections if "EXPOSED" in detection["class"]]
+        exposed_labels = [detection["class"] for detection in detections if detection_is_censorable(detection)]
         exposed_count = len(exposed_labels)
         return exposed_count
         
@@ -1373,6 +1504,14 @@ def parse_args():
                       help="Seconds between detections before starting a new editor marker. Default is 1.0.")
     parser.add_argument("--providers", type=str, default=None,
                       help="Comma-separated ONNX Runtime providers, e.g. CUDAExecutionProvider,CPUExecutionProvider")
+    parser.add_argument("--detectors", type=str, default="nude",
+                      help="Detector set to use: nude, objects, or both. Comma-separated values are accepted.")
+    parser.add_argument("--object-model", type=str, default=DEFAULT_OBJECT_MODEL,
+                      help="Path to the optional safety-object ONNX model.")
+    parser.add_argument("--object-labels", type=str, default=DEFAULT_OBJECT_LABELS,
+                      help="Path to the safety-object labels JSON file.")
+    parser.add_argument("--object-threshold", type=float, default=0.25,
+                      help="Minimum confidence for safety-object detections.")
     return parser.parse_args()
 
 # Global args variable for access across classes
@@ -1549,17 +1688,16 @@ if __name__ == "__main__":
     if args.task == "video" and args.with_audio:
         check_ffmpeg_availability(args.ffmpeg_path)
 
-    if args.task == "video":
-        video_processor = NudeVideoProcessor(
-            args.input,
-            args.output,
-            task=args.task,
-            providers=parse_provider_list(args.providers),
-            video_output_folder=video_output_folder,
-            blur_rule=rule,
-        )
-        video_processor.process_video()
-    elif args.task == "frames":
-        detector = NudeDetector(providers=parse_provider_list(args.providers))
-        detector.load_exception_rules("BlurException.rule")
-        process_frames(args.input, detector, args.output)
+    video_processor = NudeVideoProcessor(
+        args.input,
+        args.output,
+        task=args.task,
+        providers=parse_provider_list(args.providers),
+        video_output_folder=video_output_folder,
+        blur_rule=rule,
+        detectors=args.detectors,
+        object_model=args.object_model,
+        object_labels=args.object_labels,
+        object_threshold=args.object_threshold,
+    )
+    video_processor.process_video()

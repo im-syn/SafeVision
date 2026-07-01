@@ -27,7 +27,7 @@ except ImportError:
     tqdm = None
 
 from safevision_utils import (
-    DEFAULT_CONTENT_LABELS,
+    ALL_CENSOR_LABELS,
     default_blur_rules,
     ensure_blur_exception_rules,
     load_blur_exception_rules,
@@ -141,6 +141,10 @@ def default_config():
         },
         "processing": {
             "providers": "",
+            "detectors": "nude",
+            "object_model": "Models/safety_objects.onnx",
+            "object_labels": "Models/safety_objects.labels.json",
+            "object_threshold": 0.25,
             "codec": "mp4v",
             "mask_shape": "rectangle",
             "mask_color": "0,0,0",
@@ -613,7 +617,7 @@ def command_rules(args):
     profiles = config.setdefault("rule_profiles", default_profiles())
 
     if args.rules_action == "init":
-        ensure_blur_exception_rules(DEFAULT_RULE_PATH, labels=DEFAULT_CONTENT_LABELS)
+        ensure_blur_exception_rules(DEFAULT_RULE_PATH, labels=ALL_CENSOR_LABELS)
         activate_rule_profile(config, config.get("active_rule_profile", "default"))
         return
 
@@ -622,15 +626,17 @@ def command_rules(args):
         active = config.get("active_rule_profile", "default")
         for name in sorted(profiles):
             marker = "*" if name == active else " "
-            enabled = sum(1 for value in profiles[name].values() if value)
-            disabled = len(DEFAULT_CONTENT_LABELS) - enabled
+            normalized = normalize_rules(profiles[name])
+            enabled = sum(1 for value in normalized.values() if value)
+            disabled = len(ALL_CENSOR_LABELS) - enabled
             print(f"{marker} {name:18} blur={enabled:2} skip={disabled:2}")
         return
 
     if args.rules_action == "show":
         name, rules = rule_profile(config, args.profile)
+        rules = normalize_rules(rules)
         print_header(f"Rule Profile: {name}")
-        for label in DEFAULT_CONTENT_LABELS:
+        for label in ALL_CENSOR_LABELS:
             print(f"{label:30} {'blur' if rules.get(label, True) else 'skip'}")
         return
 
@@ -643,7 +649,7 @@ def command_rules(args):
             print_error(f"Profile already exists: {args.profile}. Use --force to overwrite.")
             return 2
         if args.from_file:
-            profiles[args.profile] = load_blur_exception_rules(args.from_file, labels=DEFAULT_CONTENT_LABELS)
+            profiles[args.profile] = load_blur_exception_rules(args.from_file, labels=ALL_CENSOR_LABELS)
         elif args.base:
             _, base_rules = rule_profile(config, args.base)
             profiles[args.profile] = dict(base_rules)
@@ -655,7 +661,7 @@ def command_rules(args):
 
     if args.rules_action == "set":
         name, rules = rule_profile(config, args.profile)
-        if args.label not in DEFAULT_CONTENT_LABELS:
+        if args.label not in ALL_CENSOR_LABELS:
             print_error(f"Unknown label: {args.label}")
             return 2
         rules[args.label] = parse_bool(args.value)
@@ -693,6 +699,22 @@ def append_common_processing_options(command, config, args):
     providers = args.providers if getattr(args, "providers", None) is not None else processing.get("providers", "")
     if providers:
         command.extend(["--providers", providers])
+    detectors = getattr(args, "detectors", None)
+    if detectors is None:
+        detectors = processing.get("detectors", "nude")
+    if detectors:
+        command.extend(["--detectors", str(detectors)])
+    object_model = getattr(args, "object_model", None) or processing.get("object_model")
+    if object_model:
+        command.extend(["--object-model", str(object_model)])
+    object_labels = getattr(args, "object_labels", None) or processing.get("object_labels")
+    if object_labels:
+        command.extend(["--object-labels", str(object_labels)])
+    object_threshold = getattr(args, "object_threshold", None)
+    if object_threshold is None:
+        object_threshold = processing.get("object_threshold")
+    if object_threshold not in (None, ""):
+        command.extend(["--object-threshold", str(object_threshold)])
     return command
 
 
@@ -988,6 +1010,10 @@ def interactive_process():
         output=None,
         output_dir=None,
         providers=processing.get("providers", ""),
+        detectors=processing.get("detectors", "nude"),
+        object_model=processing.get("object_model", "Models/safety_objects.onnx"),
+        object_labels=processing.get("object_labels", "Models/safety_objects.labels.json"),
+        object_threshold=processing.get("object_threshold", 0.25),
         blur=False,
         boxes=False,
         with_audio=False,
@@ -1008,6 +1034,15 @@ def interactive_process():
         full_blur_rule=processing.get("full_blur_rule", ""),
         ffmpeg_path=None,
     )
+
+    args.detectors = choose_from_values(
+        "Detector Models",
+        ["nude", "objects", "both"],
+        default=processing.get("detectors", "nude"),
+        allow_back=False,
+    )
+    if args.detectors in {"objects", "both"}:
+        args.object_threshold = float(prompt("Safety-object threshold", default=str(args.object_threshold or 0.25)))
 
     if suffix in IMAGE_EXTENSIONS:
         args.blur = prompt_bool("Apply blur/mask to detected regions", default=True)
@@ -1067,6 +1102,10 @@ def interactive_settings():
     common_settings = [
         ("Active rule profile", "active_rule_profile"),
         ("ONNX providers", "processing.providers"),
+        ("Detector models", "processing.detectors"),
+        ("Safety object model", "processing.object_model"),
+        ("Safety object labels", "processing.object_labels"),
+        ("Safety object threshold", "processing.object_threshold"),
         ("Video codec", "processing.codec"),
         ("Mask shape", "processing.mask_shape"),
         ("Mask color", "processing.mask_color"),
@@ -1158,6 +1197,8 @@ def interactive_settings():
                 value = choose_from_values("Mask Shape", ["rectangle", "ellipse", "oval"], default=current, allow_back=False)
             elif key == "processing.codec":
                 value = choose_from_values("Video Codec", ["mp4v", "avc1", "xvid", "mjpg"], default=current, allow_back=False)
+            elif key == "processing.detectors":
+                value = choose_from_values("Detector Models", ["nude", "objects", "both"], default=current, allow_back=False)
             elif key == "processing.export_markers":
                 value = choose_from_values("Marker Export", ["none", "edl", "fcpxml", "both"], default=current or "none", allow_back=False)
                 if value == "none":
@@ -1229,7 +1270,7 @@ def interactive_rules():
             profile = choose_from_values("Profile", profiles, default=config.get("active_rule_profile"), allow_back=True)
             if profile == "__back__":
                 continue
-            label = choose_from_values("Label", DEFAULT_CONTENT_LABELS, allow_back=True)
+            label = choose_from_values("Label", ALL_CENSOR_LABELS, allow_back=True)
             if label == "__back__":
                 continue
             value = prompt_bool(f"Blur {label}", default=True)
@@ -1464,6 +1505,10 @@ def build_parser():
     process_parser.add_argument("-o", "--output", help="Image output file")
     process_parser.add_argument("--output-dir", help="Video output folder")
     process_parser.add_argument("--providers", help="Comma-separated ONNX providers")
+    process_parser.add_argument("--detectors", choices=["nude", "objects", "both"], help="Detector set to use")
+    process_parser.add_argument("--object-model", help="Path to safety-object ONNX model")
+    process_parser.add_argument("--object-labels", help="Path to safety-object labels JSON")
+    process_parser.add_argument("--object-threshold", type=float, help="Minimum confidence for safety-object detections")
     process_parser.add_argument("--blur", action="store_true", help="Apply blur/mask to detections")
     process_parser.add_argument("--boxes", action="store_true", help="For video, generate detection-box output")
     process_parser.add_argument("-a", "--with-audio", action="store_true")

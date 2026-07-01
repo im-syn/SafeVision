@@ -18,7 +18,7 @@
 - **Multi-Format Support**: Images, videos, live camera feeds, screen capture
 - **Real-time Processing**: Live detection with sub-second response times
 - **Multiple Interfaces**: CLI, GUI, API server, screen overlay, streaming integration
-- **Advanced AI Models**: ONNX-optimized deep learning models with 18+ detection categories
+- **Advanced AI Models**: ONNX-optimized nudity/body detection plus optional safety-object detection
 - **Professional Features**: Batch processing, custom rules, alert systems, logging
 - **Cross-Platform**: Windows, Linux, macOS support with optimized performance
 
@@ -44,6 +44,7 @@
 
 ### ⚙️ Advanced Features
 * [📋 Blur Exception Rules](#-blur-exception-rules)
+* [🚬 Safety Object Model](#-safety-object-model-smoking-alcohol-drugs)
 * [🔍 Detection Models & Labels](#-detection-models--labels)
 * [📊 Logging & Monitoring](#-logging--monitoring)
 
@@ -59,7 +60,8 @@
 
 ### 🤖 AI-Powered Detection
 - **Advanced ONNX Models**: Optimized deep learning models for accurate content detection
-- **18+ Detection Categories**: Comprehensive labeling system for different content types
+- **Dual Model Detection**: Run nudity/body detection, safety-object detection, or both in one pass
+- **33 Censor Labels**: 18 nudity/body labels plus 15 smoking/alcohol/drug object labels
 - **Risk Assessment**: Automatic severity classification (Safe, Low, Moderate, High, Critical)
 - **Real-time Processing**: Sub-second analysis with GPU acceleration support
 - **Confidence Scoring**: Adjustable detection thresholds for different use cases
@@ -146,11 +148,58 @@ SafeVision requires ONNX model files in the `Models/` directory:
 mkdir Models
 
 # Place your models (obtain from official source):
-# Models/best.onnx           - Main nudity detection model
-# Models/best_gender.onnx    - Gender/age detection model (optional)
+# Models/best.onnx                    - Main nudity/body detection model
+# Models/best_gender.onnx             - Gender/age detection model (optional)
+# Models/safety_objects.onnx          - Optional smoking/alcohol/drug object model
+# Models/safety_objects.labels.json   - Labels/categories for safety_objects.onnx
 ```
 
 > **📥 Model Download**: Contact the maintainer or check releases for official model files.
+
+The safety-object model is optional. If it is present, image and video processing can use `--detectors objects` or `--detectors both`. If it is missing, keep the default `--detectors nude` mode.
+
+`safety_objects.labels.json` must stay in sync with the ONNX class order. The current labels are:
+
+```text
+cigarette, cigar, vape, smoking_pipe, joint,
+alcohol_bottle, beer_bottle, wine_glass, beer_glass, cocktail_glass,
+pill, pill_bottle, syringe, cannabis_leaf, drug_bag
+```
+
+### Safety Object Model Training
+
+The current `Models/safety_objects.onnx` model was trained as a second YOLO object-detection model. It does not replace the nudity/body model; it adds visible smoking, alcohol, and drug-related object detection.
+
+Training workflow used:
+
+```powershell
+# From the training toolkit folder
+cd C:\path\to\SafeText\traine
+
+# Check/install training dependencies
+python train_safety_objects.py check
+
+# Import a Roboflow/YOLOv8 dataset zip
+python train_safety_objects.py import-yolo datasets\cigarette.v3i.yolov8.zip
+
+# Validate the merged YOLO dataset
+python train_safety_objects.py validate
+
+# Train. Use auto so it falls back to CPU when CUDA is unavailable.
+python train_safety_objects.py train --base-model yolov8s.pt --imgsz 640 --epochs 100 --batch 16 --device auto
+
+# Export the best checkpoint to SafeVision ONNX files
+python train_safety_objects.py export --imgsz 640 --opset 15
+```
+
+The export writes:
+
+```text
+SafeVision/Models/safety_objects.onnx
+SafeVision/Models/safety_objects.labels.json
+```
+
+The first dataset imported for this model was a YOLOv8 cigarette dataset from Roboflow. The training script is designed to merge more YOLO datasets later, so alcohol and drug classes can be improved by importing additional datasets with matching or aliased class names. Keep `safety_labels.json` stable once a model is trained because ONNX output class indexes depend on label order.
 
 ### 🔧 Advanced Installation Options
 
@@ -251,6 +300,16 @@ python safeVisionCLI.py scan input --recursive
 # Process a video with the active rule profile
 python safeVisionCLI.py process input/1.mp4 --providers CUDAExecutionProvider,CPUExecutionProvider
 
+# Use the new safety-object model only
+python safeVisionCLI.py process input/1.mp4 --detectors objects --boxes --blur
+
+# Run both nudity/body and safety-object models together
+python safeVisionCLI.py process input/1.mp4 --detectors both --boxes --blur --object-threshold 0.25
+
+# Persist the default detector mode in settings/configs.json
+python safeVisionCLI.py settings set processing.detectors both
+python safeVisionCLI.py settings set processing.object_threshold 0.25
+
 # Launch the desktop GUI or API/web server when those files exist
 python safeVisionCLI.py launch gui
 python safeVisionCLI.py launch web
@@ -312,6 +371,7 @@ SafeVision/
 │   ├── live_streamer.py           # Live streaming integration
 │   ├── safeVisionScreenGuard.py   # Desktop screen protection overlay
 │   ├── safeVisionCLI.py           # Interactive console and settings manager
+│   ├── object_detector.py         # Optional safety-object ONNX detector
 │   └── safevision_utils.py        # Shared rules, providers, and IO helpers
 │
 ├── 🎨 User Interfaces
@@ -320,8 +380,10 @@ SafeVision/
 │
 ├── 📁 Models & Configuration
 │   ├── Models/
-│   │   ├── best.onnx             # Main detection model
-│   │   └── best_gender.onnx      # Gender/age model (optional)
+│   │   ├── best.onnx                       # Main nudity/body detection model
+│   │   ├── best_gender.onnx                # Gender/age model (optional)
+│   │   ├── safety_objects.onnx             # Smoking/alcohol/drug object detector
+│   │   └── safety_objects.labels.json      # Safety-object labels and thresholds
 │   ├── BlurException.rule         # Default blur rules, auto-created if missing
 │   ├── settings/configs.json      # Console settings and rule profiles
 │   └── custom_rules.rule          # Custom rule examples
@@ -345,6 +407,7 @@ SafeVision/
 #### 🎯 Core Processing Files
 - **`main.py`**: Single image processing with CLI interface
 - **`video.py`**: Batch video processing with advanced options
+- **`object_detector.py`**: Reusable YOLO ONNX detector for smoking/alcohol/drug objects
 - **`live.py`**: Real-time camera feed analysis
 - **`live_streamer.py`**: Live streaming integration with OBS support
 
@@ -414,7 +477,128 @@ ANUS_COVERED = false
 BELLY_COVERED = false
 FEET_COVERED = false
 ARMPITS_COVERED = false
+
+# Safety object model labels
+cigarette = true
+vape = true
+alcohol_bottle = true
+wine_glass = true
+pill = true
+syringe = true
+cannabis_leaf = true
 ```
+
+The console rule profiles now include both model families. `true` means a matching detection is blurred/masked; `false` means the detection can still be reported or boxed but the blur/mask is skipped.
+
+Detector settings are stored in `settings/configs.json`:
+
+```json
+{
+  "processing": {
+    "detectors": "nude",
+    "object_model": "Models/safety_objects.onnx",
+    "object_labels": "Models/safety_objects.labels.json",
+    "object_threshold": 0.25
+  }
+}
+```
+
+Valid detector modes are `nude`, `objects`, and `both`.
+
+---
+
+## 🚬 Safety Object Model (Smoking, Alcohol, Drugs)
+
+SafeVision now supports a second optional ONNX model: `Models/safety_objects.onnx`.
+
+This model is a YOLO-style object detector trained for visible safety-related objects:
+
+| Category | Labels |
+|----------|--------|
+| Smoking | `cigarette`, `cigar`, `vape`, `smoking_pipe`, `joint` |
+| Alcohol | `alcohol_bottle`, `beer_bottle`, `wine_glass`, `beer_glass`, `cocktail_glass` |
+| Drugs | `pill`, `pill_bottle`, `syringe`, `cannabis_leaf`, `drug_bag` |
+
+The model metadata lives in `Models/safety_objects.labels.json`. It defines label order, category mapping, aliases, and default category thresholds. Do not edit label order unless you also retrain/export the ONNX model.
+
+### Detector Modes
+
+The image, video, CLI, and GUI paths can choose which model family to run:
+
+| Mode | Meaning |
+|------|---------|
+| `nude` | Run only the original nudity/body model |
+| `objects` | Run only `safety_objects.onnx` |
+| `both` | Run both models and merge detections |
+
+Examples:
+
+```bash
+# Image: object model only
+python main.py -i input.jpg -b --detectors objects --object-threshold 0.25
+
+# Image: both models
+python main.py -i input.jpg -b --detectors both
+
+# Video: both models with boxes and blur
+python video.py -i input.mp4 -b --blur --detectors both --object-threshold 0.25
+
+# CLI: persist both models as the default
+python safeVisionCLI.py settings set processing.detectors both
+```
+
+When a safety-object label is detected, SafeVision treats it as censorable. It can be blurred, solid-color masked, boxed, logged, exported to JSON/CSV reports, and exported to EDL/FCPXML marker files.
+
+### Training Summary
+
+The current model was trained as a separate YOLOv8 object detector:
+
+1. A YOLOv8-format cigarette dataset was imported from Roboflow.
+2. The training tool normalized dataset structure into `datasets/safety_objects`.
+3. Labels were mapped to the canonical `safety_labels.json` order.
+4. Training used Ultralytics YOLO with `imgsz 640`.
+5. The best checkpoint was exported to ONNX opset 15.
+6. The exported files were copied into `SafeVision/Models/`.
+
+Recommended command flow:
+
+```powershell
+cd C:\path\to\SafeText\traine
+python train_safety_objects.py check
+python train_safety_objects.py import-yolo C:\path\to\dataset.yolov8.zip
+python train_safety_objects.py validate
+python train_safety_objects.py train --base-model yolov8s.pt --imgsz 640 --epochs 100 --batch 16 --device auto
+python train_safety_objects.py export --imgsz 640 --opset 15
+```
+
+If PyTorch reports `torch.cuda.is_available(): False`, use `--device auto` or `--device cpu`. Use `--device 0 --strict-device` only when a real CUDA GPU is visible to PyTorch.
+
+For better coverage, import more datasets for alcohol/drug classes before retraining. The first model is strongest on cigarette-like objects because that was the first dataset added.
+
+---
+
+## 🔍 Detection Models & Labels
+
+| File | Purpose | Labels |
+|------|---------|--------|
+| `Models/best.onnx` | Main nudity/body detector | 18 body/coverage labels |
+| `Models/best_gender.onnx` | Optional gender/age helper for live tools | Gender/age outputs |
+| `Models/safety_objects.onnx` | Optional smoking/alcohol/drug object detector | 15 object labels |
+| `Models/safety_objects.labels.json` | Metadata for the safety-object detector | Label order, categories, aliases, thresholds |
+
+Detection outputs now include source metadata when reports are enabled:
+
+```json
+{
+  "class": "cigarette",
+  "category": "smoking",
+  "source": "objects",
+  "model": "safety_objects",
+  "censor": true
+}
+```
+
+This lets JSON/CSV reports and editor marker exports identify which model produced each detection.
 
 ### 🎛️ Application-Specific Settings
 
@@ -449,10 +633,11 @@ API_CONFIG = {
 
 ## 🖼️ Image Processing (main.py)
 
-**Purpose**: Process single images with nudity detection and apply censoring/blurring effects.
+**Purpose**: Process single images with nudity/body and optional safety-object detection, then apply censoring/blurring effects.
 
 **Key Features**:
-- Single image analysis with ONNX model inference
+- Single image analysis with selectable ONNX model inference
+- Optional smoking/alcohol/drug object detection with `safety_objects.onnx`
 - Customizable blur strength and masking options
 - Bounding box visualization with confidence scores
 - Multiple output formats (original, blurred, detection overlay)
@@ -462,7 +647,7 @@ API_CONFIG = {
 
 ## �️ Image Processing (main.py)
 
-**Purpose**: Process single images with nudity detection and apply censoring/blurring effects.
+**Purpose**: Process single images with selected SafeVision detector models and apply censoring/blurring effects.
 
 **Key Features**:
 - Single image analysis with ONNX model inference
@@ -483,6 +668,12 @@ python main.py -i input.jpg -o custom_output.jpg
 # Apply blur to detected regions
 python main.py -i input.jpg -b
 
+# Run only the safety-object model
+python main.py -i input.jpg -b --detectors objects
+
+# Run both the nudity/body model and safety-object model
+python main.py -i input.jpg -b --detectors both --object-threshold 0.25
+
 # Use custom exception rules
 python main.py -i input.jpg -b -e custom_rules.rule
 
@@ -499,6 +690,10 @@ python main.py -i input.jpg -b -fbr 2
 | `-b` | `--blur` | `flag` | Apply blur to detected regions | False |
 | `-e` | `--exception` | `str` | Path to blur exception rules file | `BlurException.rule` |
 | `-fbr` | `--full_blur_rule` | `int` | Exposed regions count to trigger full blur | 0 (disabled) |
+| N/A | `--detectors` | `str` | Detector mode: `nude`, `objects`, or `both` | `nude` |
+| N/A | `--object-model` | `str` | Path to safety-object ONNX model | `Models/safety_objects.onnx` |
+| N/A | `--object-labels` | `str` | Path to safety-object labels JSON | `Models/safety_objects.labels.json` |
+| N/A | `--object-threshold` | `float` | Minimum confidence for safety-object detections | `0.25` |
 
 ### 📁 Output Structure
 
@@ -529,14 +724,20 @@ The model detects 18 different content categories with confidence scores:
 - **High Risk**: `FEMALE_BREAST_EXPOSED`, `ANUS_EXPOSED`
 - **Critical Risk**: `FEMALE_GENITALIA_EXPOSED`, `MALE_GENITALIA_EXPOSED`
 
+**Safety Object Categories (optional `--detectors objects|both`):**
+- **Smoking**: `cigarette`, `cigar`, `vape`, `smoking_pipe`, `joint`
+- **Alcohol**: `alcohol_bottle`, `beer_bottle`, `wine_glass`, `beer_glass`, `cocktail_glass`
+- **Drugs**: `pill`, `pill_bottle`, `syringe`, `cannabis_leaf`, `drug_bag`
+
 ---
 
 ## 🎥 Video Processing (video.py)
 
-**Purpose**: Process video files with frame-by-frame nudity detection and apply censoring effects.
+**Purpose**: Process video files with frame-by-frame nudity/body and optional safety-object detection, then apply censoring effects.
 
 **Key Features**:
-- Frame-by-frame analysis with ONNX model inference
+- Frame-by-frame analysis with selectable ONNX model inference
+- Optional smoking/alcohol/drug object detection with `safety_objects.onnx`
 - Audio preservation during processing
 - Multiple output formats (original, blurred, with detection boxes)
 - Batch processing with progress tracking
@@ -551,6 +752,12 @@ python video.py -i path/to/video.mp4 -t video
 
 # Blur detected areas with audio preservation
 python video.py -i input.mp4 -b --blur -a
+
+# Safety-object model only
+python video.py -i input.mp4 -b --blur --detectors objects
+
+# Both models with object threshold control
+python video.py -i input.mp4 -b --blur --detectors both --object-threshold 0.25
 
 # Custom output location
 python video.py -i input.mp4 -o output.mp4 -t video
@@ -583,6 +790,10 @@ python video.py -i input.mp4 -b --color --mask-color 255,0,0 --mask-shape ellips
 | `--mask-shape` | N/A | `str` | Regional mask shape: `rectangle` or `ellipse` | `rectangle` |
 | `-fbr` | `--full-blur-rule` | `str` | Full blur trigger: `labels/frames` | `0` |
 | N/A | `--providers` | `str` | Comma-separated ONNX Runtime providers | Auto-select |
+| N/A | `--detectors` | `str` | Detector mode: `nude`, `objects`, or `both` | `nude` |
+| N/A | `--object-model` | `str` | Path to safety-object ONNX model | `Models/safety_objects.onnx` |
+| N/A | `--object-labels` | `str` | Path to safety-object labels JSON | `Models/safety_objects.labels.json` |
+| N/A | `--object-threshold` | `float` | Minimum confidence for safety-object detections | `0.25` |
 
 ### 🎛️ Processing Modes
 
@@ -732,7 +943,7 @@ This section provides comprehensive documentation for all command-line arguments
 
 ### 🖼️ main.py - Image Processing
 
-**Purpose**: Process individual images for nudity detection with blur and masking options.
+**Purpose**: Process individual images with nudity/body and optional safety-object detection.
 
 **Basic Usage**: `python main.py -i input.jpg [options]`
 
@@ -743,6 +954,10 @@ This section provides comprehensive documentation for all command-line arguments
 | `--blur` | `-b` | `flag` | `False` | Apply blur to NSFW regions instead of drawing detection boxes |
 | `--exception` | `-e` | `str` | `BlurException.rule` | Path to the blur exception rules file for custom filtering |
 | `--full_blur_rule` | `-fbr` | `int` | `0` | Number of exposed regions that trigger full image blur |
+| `--detectors` | | `str` | `nude` | Detector mode: `nude`, `objects`, or `both` |
+| `--object-model` | | `str` | `Models/safety_objects.onnx` | Safety-object ONNX model path |
+| `--object-labels` | | `str` | `Models/safety_objects.labels.json` | Safety-object labels JSON path |
+| `--object-threshold` | | `float` | `0.25` | Minimum safety-object confidence |
 
 **Examples**:
 ```bash
@@ -757,11 +972,17 @@ python main.py -i image.jpg -e custom_rules.rule
 
 # Full blur if 2+ exposed regions found
 python main.py -i image.jpg -fbr 2
+
+# Detect cigarettes/alcohol/drugs only
+python main.py -i image.jpg -b --detectors objects
+
+# Detect both model families
+python main.py -i image.jpg -b --detectors both
 ```
 
 ### 🎬 video.py - Video Processing
 
-**Purpose**: Process video files with frame-by-frame nudity detection and advanced censoring options.
+**Purpose**: Process video files with frame-by-frame nudity/body and optional safety-object detection.
 
 **Basic Usage**: `python video.py -i input.mp4 [options]`
 
@@ -782,6 +1003,10 @@ python main.py -i image.jpg -fbr 2
 | `--full-blur-rule` | `-fbr` | `str` | None | Full blur rule: `labels/frames` format |
 | `--color` | | `flag` | `False` | Use solid color instead of blur |
 | `--mask-color` | | `str` | `0,0,0` | BGR color for masking (blue,green,red) |
+| `--detectors` | | `str` | `nude` | Detector mode: `nude`, `objects`, or `both` |
+| `--object-model` | | `str` | `Models/safety_objects.onnx` | Safety-object ONNX model path |
+| `--object-labels` | | `str` | `Models/safety_objects.labels.json` | Safety-object labels JSON path |
+| `--object-threshold` | | `float` | `0.25` | Minimum safety-object confidence |
 
 **Examples**:
 ```bash
@@ -802,6 +1027,12 @@ python video.py -i video.mp4 --enhanced-blur -c avc1
 
 # Full blur if 2+ exposed labels in 5+ frames
 python video.py -i video.mp4 -fbr 2/5
+
+# Detect safety objects only
+python video.py -i video.mp4 -b --blur --detectors objects
+
+# Detect nudity/body labels plus safety objects
+python video.py -i video.mp4 -b --blur --detectors both
 ```
 
 ### 📹 live.py - Live Camera Processing
@@ -1257,9 +1488,9 @@ FACE_MALE = false
 ###  Pipeline
 
 1. **Preprocessing** – Resize and normalize input image or video frames.
-2. **Inference** – Use `ONNXRuntime` to run the `best.onnx` model.
-3. **Postprocessing** – Detect bounding boxes and labels.
-4. **Censorship** – Apply blur/mask/box per user rules.
+2. **Inference** – Use `ONNXRuntime` to run the selected detector model(s): `best.onnx`, `safety_objects.onnx`, or both.
+3. **Postprocessing** – Convert YOLO outputs into bounding boxes, labels, scores, categories, and source model metadata.
+4. **Censorship** – Apply blur/mask/box per user rules, including `BlurException.rule` object-label rules.
 5. **Rendering** – Save censored images/videos to output folders.
 
 ---

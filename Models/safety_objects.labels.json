@@ -1,0 +1,120 @@
+{
+  "model_name": "safety_objects",
+  "labels": [
+    "cigarette",
+    "cigar",
+    "vape",
+    "smoking_pipe",
+    "joint",
+    "alcohol_bottle",
+    "beer_bottle",
+    "wine_glass",
+    "beer_glass",
+    "cocktail_glass",
+    "pill",
+    "pill_bottle",
+    "syringe",
+    "cannabis_leaf",
+    "drug_bag"
+  ],
+  "categories": {
+    "cigarette": "smoking",
+    "cigar": "smoking",
+    "vape": "smoking",
+    "smoking_pipe": "smoking",
+    "joint": "smoking",
+    "alcohol_bottle": "alcohol",
+    "beer_bottle": "alcohol",
+    "wine_glass": "alcohol",
+    "beer_glass": "alcohol",
+    "cocktail_glass": "alcohol",
+    "pill": "drugs",
+    "pill_bottle": "drugs",
+    "syringe": "drugs",
+    "cannabis_leaf": "drugs",
+    "drug_bag": "drugs"
+  },
+  "aliases": {
+    "cigarette": [
+      "cigarette",
+      "cigarettes",
+      "smoke",
+      "smoking"
+    ],
+    "cigar": [
+      "cigar",
+      "cigars"
+    ],
+    "vape": [
+      "vape",
+      "vapes",
+      "vaping",
+      "e-cigarette",
+      "ecigarette",
+      "e-cig"
+    ],
+    "smoking_pipe": [
+      "smoking pipe",
+      "pipe"
+    ],
+    "joint": [
+      "joint",
+      "marijuana joint",
+      "weed joint"
+    ],
+    "alcohol_bottle": [
+      "alcohol",
+      "alcohol bottle",
+      "liquor",
+      "liquor bottle",
+      "wine bottle"
+    ],
+    "beer_bottle": [
+      "beer",
+      "beer bottle"
+    ],
+    "wine_glass": [
+      "wine glass"
+    ],
+    "beer_glass": [
+      "beer glass"
+    ],
+    "cocktail_glass": [
+      "cocktail",
+      "cocktail glass"
+    ],
+    "pill": [
+      "pill",
+      "pills",
+      "tablet",
+      "tablets"
+    ],
+    "pill_bottle": [
+      "pill bottle",
+      "medicine bottle",
+      "prescription bottle"
+    ],
+    "syringe": [
+      "syringe",
+      "needle",
+      "injection"
+    ],
+    "cannabis_leaf": [
+      "cannabis",
+      "cannabis leaf",
+      "marijuana",
+      "weed"
+    ],
+    "drug_bag": [
+      "drug bag",
+      "powder bag",
+      "baggie"
+    ]
+  },
+  "default_thresholds": {
+    "smoking": 0.35,
+    "alcohol": 0.45,
+    "drugs": 0.5
+  },
+  "format": "yolo_onnx"
+}

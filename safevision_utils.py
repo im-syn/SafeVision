@@ -28,6 +28,26 @@ DEFAULT_CONTENT_LABELS = [
     "BUTTOCKS_COVERED",
 ]
 
+SAFETY_OBJECT_LABELS = [
+    "cigarette",
+    "cigar",
+    "vape",
+    "smoking_pipe",
+    "joint",
+    "alcohol_bottle",
+    "beer_bottle",
+    "wine_glass",
+    "beer_glass",
+    "cocktail_glass",
+    "pill",
+    "pill_bottle",
+    "syringe",
+    "cannabis_leaf",
+    "drug_bag",
+]
+
+ALL_CENSOR_LABELS = DEFAULT_CONTENT_LABELS + SAFETY_OBJECT_LABELS
+
 
 def label_group(label):
     label = str(label or "").upper()
@@ -51,7 +71,45 @@ def label_matches_filter(label, label_filter="exposed"):
 
 
 def default_blur_rules(labels=None, blur=True):
-    return {label: bool(blur) for label in (labels or DEFAULT_CONTENT_LABELS)}
+    return {label: bool(blur) for label in (labels or ALL_CENSOR_LABELS)}
+
+
+def detection_is_censorable(detection):
+    if isinstance(detection, dict):
+        if "censor" in detection:
+            return bool(detection.get("censor"))
+        label = detection.get("class", "")
+        category = str(detection.get("category", "")).lower()
+        if category in {"smoking", "alcohol", "drugs"}:
+            return True
+    else:
+        label = detection
+
+    label_text = str(label or "")
+    return "EXPOSED" in label_text.upper() or label_text in SAFETY_OBJECT_LABELS
+
+
+def parse_detector_selection(value=None, default="nude"):
+    raw_value = value
+    if raw_value in (None, ""):
+        raw_value = os.environ.get("SAFEVISION_DETECTORS", default)
+
+    selected = []
+    for token in str(raw_value or default).replace(";", ",").replace("+", ",").split(","):
+        name = token.strip().lower()
+        if not name or name == "none":
+            continue
+        if name in {"all", "both", "combined"}:
+            selected.extend(["nude", "objects"])
+        elif name in {"nude", "nudity", "body", "safevision"}:
+            selected.append("nude")
+        elif name in {"object", "objects", "safety", "safety_objects", "cigarette", "smoking", "alcohol", "drugs"}:
+            selected.append("objects")
+
+    selected = list(dict.fromkeys(selected))
+    if not selected:
+        selected = list(dict.fromkeys(parse_detector_selection(default, default="nude")))
+    return selected
 
 
 def write_blur_exception_rules(path="BlurException.rule", rules=None, labels=None):
@@ -62,7 +120,7 @@ def write_blur_exception_rules(path="BlurException.rule", rules=None, labels=Non
 
     rules = rules or default_blur_rules(labels)
     with open(path, "w", encoding="utf-8") as rule_file:
-        for label in (labels or DEFAULT_CONTENT_LABELS):
+        for label in (labels or ALL_CENSOR_LABELS):
             rule_file.write(f"{label} = {'true' if rules.get(label, True) else 'false'}\n")
     return path
 
