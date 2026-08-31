@@ -371,11 +371,11 @@ Detailed interface manuals:
 
 | Surface | NSFW | Age | Gender | Objects | Regional censor | Full cover | Reports | Audio |
 |---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
-| Image CLI | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | JSON/log | — |
+| Image CLI | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | JSON/log | - |
 | Video CLI | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | JSON/CSV/markers | ✅ FFmpeg |
 | Desktop GUI | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ FFmpeg |
 | Live camera | ✅ | ✅ | ✅ | Optional | ✅ | Policy block | Runtime | Live |
-| Screen Guard | ✅ | ✅ | ✅ | Optional | ✅ | Policy block | Runtime | — |
+| Screen Guard | ✅ | ✅ | ✅ | Optional | ✅ | Policy block | Runtime | - |
 | Live Streamer | ✅ | ✅ | ✅ | Optional | ✅ | Policy block | Runtime | Stream |
 | Local Web API | ✅ | ✅ | ✅ | Configurable | ✅ | ✅ | JSON | No¹ |
 | `vision2` API/admin | ✅ | ✅ | ✅ | Existing service config | ✅ | ✅ | JSON/admin | Configurable |
@@ -470,13 +470,13 @@ python safeVisionCLI.py providers
 
 SafeVision uses these model files:
 
-- `Models/best.onnx` — NSFW/body-region detector. The image/video tools try to
+- `Models/best.onnx` - NSFW/body-region detector. The image/video tools try to
   download it automatically if it is missing.
-- `Models/onnx-communityage-gender-prediction-ONNX.onnx` — estimated age and
+- `Models/onnx-communityage-gender-prediction-ONNX.onnx` - estimated age and
   gender model. Download `onnx/model.onnx` from
   [onnx-community/age-gender-prediction-ONNX](https://huggingface.co/onnx-community/age-gender-prediction-ONNX/tree/main/onnx)
   and rename/place it at this exact path.
-- `Models/safety_objects.onnx` and `Models/safety_objects.labels.json` —
+- `Models/safety_objects.onnx` and `Models/safety_objects.labels.json` -
   optional safety-object detector and metadata.
 
 The age/gender model needs ONNX Runtime 1.18 or newer. The requirement is
@@ -543,15 +543,15 @@ and exact output choices separate for auditing.
 
 Use `--detectors` with any comma-separated combination:
 
-- `nude` or `nsfw` — NSFW/body-region detector only;
-- `age` — estimated age and underage status only;
-- `gender` — model-reported gender only;
-- `demographics` — age and gender;
-- `protection` — NSFW, age, and gender;
-- `objects` — optional safety-object model only;
-- `both` — NSFW and safety objects; this legacy alias does not include age;
-- `all` — NSFW, safety objects, age, and gender;
-- `none` — disable all detectors where supported.
+- `nude` or `nsfw` - NSFW/body-region detector only;
+- `age` - estimated age and underage status only;
+- `gender` - model-reported gender only;
+- `demographics` - age and gender;
+- `protection` - NSFW, age, and gender;
+- `objects` - optional safety-object model only;
+- `both` - NSFW and safety objects; this legacy alias does not include age;
+- `all` - NSFW, safety objects, age, and gender;
+- `none` - disable all detectors where supported.
 
 If `--detectors` is omitted, SafeVision uses `nude,age,gender`.
 
@@ -652,11 +652,11 @@ python main.py `
 
 The whole-image cover has four modes:
 
-- `blur` — strong two-pass blur. It obscures detail but retains broad colors
+- `blur` - strong two-pass blur. It obscures detail but retains broad colors
   and silhouettes.
-- `gray` — replaces every source pixel with opaque gray.
-- `black` — replaces every source pixel with black.
-- `color` — replaces every source pixel with `--full-cover-color`.
+- `gray` - replaces every source pixel with opaque gray.
+- `black` - replaces every source pixel with black.
+- `color` - replaces every source pixel with `--full-cover-color`.
 
 Use a solid mode when the source must not be visible at all.
 
@@ -924,14 +924,14 @@ sampled face observations across frames, not counts of unique people.
 
 Useful video switches:
 
-- `--enhanced-blur` — stronger regional blur;
-- `--color --mask-color "0,0,0"` — regional solid masks;
-- `--mask-shape ellipse` — elliptical regional masks;
-- `--save-boxes-copy` — in `-t frames` mode, keep separate unredacted box
+- `--enhanced-blur` - stronger regional blur;
+- `--color --mask-color "0,0,0"` - regional solid masks;
+- `--mask-shape ellipse` - elliptical regional masks;
+- `--save-boxes-copy` - in `-t frames` mode, keep separate unredacted box
   images;
-- `--no-boxes` — explicitly disable the annotated-video path;
-- `--full-cover-text` / `--no-full-cover-text` — toggle the centered message;
-- `-e path.rule` — apply the same policy template used by `main.py`.
+- `--no-boxes` - explicitly disable the annotated-video path;
+- `--full-cover-text` / `--no-full-cover-text` - toggle the centered message;
+- `-e path.rule` - apply the same policy template used by `main.py`.
 
 <details>
 <summary><strong>📁 Video output naming guide</strong></summary>
@@ -1317,10 +1317,10 @@ The default compound decision works like this:
 
 Risk tiers used by this compound rule:
 
-- `LOW` — exposed armpits, belly, feet, or male chest;
-- `MODERATE` — exposed buttocks;
-- `HIGH` — exposed female breast or anus;
-- `CRITICAL` — exposed genitalia.
+- `LOW` - exposed armpits, belly, feet, or male chest;
+- `MODERATE` - exposed buttocks;
+- `HIGH` - exposed female breast or anus;
+- `CRITICAL` - exposed genitalia.
 
 Low-risk body-context observations do not turn an ordinary child/family photo
 into a full-image block. The `strict` profile restores armpit censoring and
@@ -1582,15 +1582,15 @@ stored in `settings/configs.json`; the active profile is written to
 
 SafeVision uses these folders:
 
-- `input/` — optional source-media folder;
-- `output/` — final image requested with `-o` or the default output name;
-- `Blur/` — optional clean regional-censor image copy; disable with
+- `input/` - optional source-media folder;
+- `output/` - final image requested with `-o` or the default output name;
+- `Blur/` - optional clean regional-censor image copy; disable with
   `--no-save-blur-copy`;
-- `Prosses/` — optional, unredacted detection-box reviewer copy; enable with
+- `Prosses/` - optional, unredacted detection-box reviewer copy; enable with
   `--save-boxes-copy`;
-- `Logs/` — image logs and structured analysis JSON;
-- `video_output/` — video reports, frames, markers, and generated video files;
-- `SafeVision Web API/runtime/` — local API uploads, rendered results, and
+- `Logs/` - image logs and structured analysis JSON;
+- `video_output/` - video reports, frames, markers, and generated video files;
+- `SafeVision Web API/runtime/` - local API uploads, rendered results, and
   temporary URL downloads.
 
 An image run writes both a readable `.log` and
