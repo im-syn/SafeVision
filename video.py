@@ -17,18 +17,32 @@ import urllib.request
 import tempfile
 from pathlib import Path
 from safevision_utils import (
+    apply_full_cover,
     apply_region_censor as shared_apply_region_censor,
     cv2_imwrite,
     create_onnx_session,
     detection_is_censorable,
+    detection_is_nsfw,
+    full_cover_message,
+    full_cover_options,
     load_blur_exception_rules,
+    load_protection_rules,
     make_blur_kernel,
     normalize_mask_shape,
     open_video_capture,
     parse_provider_list,
     parse_detector_selection,
+    protection_nsfw_summary,
 )
 from object_detector import DEFAULT_OBJECT_LABELS, DEFAULT_OBJECT_MODEL, ObjectContentDetector
+from age_gender_detector import (
+    AgeGenderDetector,
+    AgeGenderModelMissingError,
+    default_model_path as default_age_gender_model_path,
+    evaluate_protection_policy,
+    face_boxes_from_detections,
+    face_result_to_detection,
+)
 from marker_export import (
     detection_events_from_frame,
     export_marker_files,
@@ -286,10 +300,10 @@ def download_model(url, save_path):
         return False
 
 class NudeDetector:
-    def __init__(self, providers=None):
+    def __init__(self, providers=None, model_path=None):
         # 1) locate the shipped model
         model_dir = os.path.join(os.path.dirname(__file__), "Models")
-        model_orig = os.path.join(model_dir, "best.onnx")
+        model_orig = os.path.abspath(os.fspath(model_path or os.path.join(model_dir, "best.onnx")))
         
         # Check if model exists, if not download it
         if not os.path.exists(model_orig):
@@ -345,7 +359,16 @@ class NudeDetector:
             mask_shape=CONFIG.get('MASK_SHAPE', 'rectangle'),
         )
 
-    def censor_frame(self, frame, detections, output_path, nsfw_percentage=None, force_full_blur=False, save_frame=True):
+    def censor_frame(
+        self,
+        frame,
+        detections,
+        output_path,
+        nsfw_percentage=None,
+        force_full_blur=False,
+        save_frame=True,
+        full_cover_kind="nsfw",
+    ):
         img_boxes = frame.copy()
         img_combined = frame.copy()
 
@@ -458,7 +481,11 @@ class NudeDetector:
         print(f"Exposure percentage: {exposed_percentage}%")
         
     def check_exposed_count(self, detections):
-        exposed_labels = [detection["class"] for detection in detections if detection_is_censorable(detection)]
+        exposed_labels = [
+            detection["class"]
+            for detection in detections
+            if detection_is_nsfw(detection) and self.should_apply_blur(detection["class"])
+        ]
         exposed_count = len(exposed_labels)
         return exposed_count
 
@@ -476,6 +503,18 @@ class NudeVideoProcessor:
         object_model=None,
         object_labels=None,
         object_threshold=0.25,
+        age_gender_model=None,
+        underage_age=18.0,
+        age_review_margin=3.0,
+        min_face_size=32,
+        face_padding=0.18,
+        rule_file="BlurException.rule",
+        nsfw_model=None,
+        protection_overrides=None,
+        full_cover_overrides=None,
+        full_cover_message_override=None,
+        save_boxes_copy=False,
+        force_full_cover=False,
     ):
         self.task = task.lower()
         self.video_path = video_path
@@ -498,11 +537,25 @@ class NudeVideoProcessor:
         self.enabled_detectors = parse_detector_selection(detectors)
         self.detector = None
         self.object_detector = None
-        self.blur_exception_rules = load_blur_exception_rules("BlurException.rule")
+        self.rule_file = os.fspath(rule_file or "BlurException.rule")
+        self.blur_exception_rules = load_blur_exception_rules(self.rule_file)
+        self.protection_rules = load_protection_rules(self.rule_file)
+        for key, value in (protection_overrides or {}).items():
+            if value is not None:
+                self.protection_rules[key] = value
+        self.full_cover_options = full_cover_options(self.protection_rules, full_cover_overrides)
+        self.full_cover_message_override = full_cover_message_override
+        self.save_boxes_copy = bool(save_boxes_copy)
+        self.force_full_cover = bool(force_full_cover)
+        self.demographic_detector = None
+        self.underage_age = float(underage_age if underage_age is not None else self.protection_rules["UNDERAGE_AGE"])
+        self.age_review_margin = float(
+            age_review_margin if age_review_margin is not None else self.protection_rules["AGE_REVIEW_MARGIN"]
+        )
 
         if "nude" in self.enabled_detectors:
-            self.detector = NudeDetector(providers)
-            self.detector.load_exception_rules("BlurException.rule")
+            self.detector = NudeDetector(providers, model_path=nsfw_model)
+            self.detector.load_exception_rules(self.rule_file)
 
         if "objects" in self.enabled_detectors:
             self.object_detector = ObjectContentDetector(
@@ -512,9 +565,24 @@ class NudeVideoProcessor:
                 threshold=object_threshold,
             )
 
-        if not self.detector and not self.object_detector:
-            raise ValueError("No detectors enabled. Use --detectors nude, --detectors objects, or --detectors both.")
-        print(f"Enabled detectors: {', '.join(self.enabled_detectors)}")
+        if "age" in self.enabled_detectors or "gender" in self.enabled_detectors:
+            self.demographic_detector = AgeGenderDetector(
+                model_path=age_gender_model or default_age_gender_model_path(),
+                providers=providers,
+                min_face_size=min_face_size,
+                face_padding=face_padding,
+            )
+            # Fail at startup with an actionable error when an enabled model is missing.
+            self.demographic_detector.load()
+
+        if (
+            not self.detector
+            and not self.object_detector
+            and not self.demographic_detector
+            and not self.force_full_cover
+        ):
+            raise ValueError("No checks enabled. Use --detectors nude,age,gender (default), objects, demographics, or all.")
+        print(f"Enabled detectors: {', '.join(self.enabled_detectors) or 'none (cover-only render)'}")
 
         self.output_folder = output_folder or "output_frames"
         self.video_output_folder = video_output_folder
@@ -527,10 +595,28 @@ class NudeVideoProcessor:
 
     def detect_frame(self, frame):
         detections = []
+        nude_detections = []
         if self.detector:
-            detections.extend(self.detector.detect_frame(frame))
+            nude_detections = self.detector.detect_frame(frame)
+            detections.extend(nude_detections)
         if self.object_detector:
             detections.extend(self.object_detector.detect_frame(frame))
+        if self.demographic_detector:
+            face_boxes = face_boxes_from_detections(
+                nude_detections,
+                width=frame.shape[1],
+                height=frame.shape[0],
+            )
+            demographics = self.demographic_detector.analyze_frame(
+                frame,
+                face_boxes=face_boxes or None,
+                age_enabled="age" in self.enabled_detectors,
+                gender_enabled="gender" in self.enabled_detectors,
+                age_threshold=self.underage_age,
+                review_margin=self.age_review_margin,
+                face_source="safevision_nsfw_faces" if face_boxes else None,
+            )
+            detections.extend(face_result_to_detection(face) for face in demographics.get("faces", []))
         return detections
 
     def should_apply_blur(self, label):
@@ -549,7 +635,16 @@ class NudeVideoProcessor:
             mask_shape=CONFIG.get('MASK_SHAPE', 'rectangle'),
         )
 
-    def censor_frame(self, frame, detections, output_path, nsfw_percentage=None, force_full_blur=False, save_frame=True):
+    def censor_frame(
+        self,
+        frame,
+        detections,
+        output_path,
+        nsfw_percentage=None,
+        force_full_blur=False,
+        save_frame=True,
+        full_cover_kind="nsfw",
+    ):
         img_boxes = frame.copy()
         img_combined = frame.copy()
         font = cv2.FONT_HERSHEY_SIMPLEX
@@ -557,28 +652,14 @@ class NudeVideoProcessor:
         font_thickness = CONFIG['FONT_THICKNESS']
 
         if force_full_blur:
-            if CONFIG['USE_SOLID_COLOR']:
-                height, width = img_combined.shape[:2]
-                img_combined = np.full((height, width, 3), CONFIG['SOLID_COLOR'], dtype=np.uint8)
-                frame[:] = np.full((height, width, 3), CONFIG['SOLID_COLOR'], dtype=np.uint8)
-            else:
-                img_combined = cv2.GaussianBlur(
-                    img_combined,
-                    (CONFIG['FULL_BLUR_STRENGTH'][0], CONFIG['FULL_BLUR_STRENGTH'][1]),
-                    CONFIG['FULL_BLUR_STRENGTH'][2],
-                )
-                frame[:] = cv2.GaussianBlur(
-                    frame,
-                    (CONFIG['FULL_BLUR_STRENGTH'][0], CONFIG['FULL_BLUR_STRENGTH'][1]),
-                    CONFIG['FULL_BLUR_STRENGTH'][2],
-                )
-
-            warning_text = "Content Filtered - Excessive Unsafe Content"
-            text_size = cv2.getTextSize(warning_text, font, 1.0, 2)[0]
-            text_x = (img_combined.shape[1] - text_size[0]) // 2
-            text_y = (img_combined.shape[0] + text_size[1]) // 2
-            cv2.putText(img_combined, warning_text, (text_x, text_y), font, 1.0, (0, 0, 255), 2, cv2.LINE_AA)
-            cv2.putText(frame, warning_text, (text_x, text_y), font, 1.0, (0, 0, 255), 2, cv2.LINE_AA)
+            warning_text = full_cover_message(
+                self.full_cover_options,
+                full_cover_kind,
+                self.full_cover_message_override,
+            )
+            covered = apply_full_cover(frame, self.full_cover_options, warning_text)
+            frame[:] = covered
+            img_combined = covered.copy()
 
         else:
             frame_height, frame_width = frame.shape[:2]
@@ -594,8 +675,14 @@ class NudeVideoProcessor:
                 label = detection.get("class", "UNKNOWN")
                 is_censorable = detection_is_censorable(detection)
                 label_text = label if not is_censorable else "Unsafe, " + label
-                box_color = CONFIG['BOX_COLOR_EXPOSED'] if is_censorable else CONFIG['BOX_COLOR_NORMAL']
+                if label == "CHILD":
+                    box_color = (0, 165, 255)
+                elif label == "AGE_REVIEW":
+                    box_color = (0, 215, 255)
+                else:
+                    box_color = CONFIG['BOX_COLOR_EXPOSED'] if is_censorable else CONFIG['BOX_COLOR_NORMAL']
                 text_color = CONFIG['TEXT_COLOR_EXPOSED'] if is_censorable else CONFIG['TEXT_COLOR_NORMAL']
+                label_text = detection.get("display_label") or label_text
                 if CONFIG['ENHANCED_BLUR'] and is_censorable:
                     blur_kernel = CONFIG['FULL_BLUR_STRENGTH']
                 else:
@@ -612,7 +699,8 @@ class NudeVideoProcessor:
 
         if save_frame and output_path:
             cv2_imwrite(output_path, img_combined)
-            cv2_imwrite(f"{output_path}_boxes.jpg", img_boxes)
+            if self.save_boxes_copy:
+                cv2_imwrite(f"{output_path}_boxes.jpg", img_boxes)
 
     def process_video(self):
         self.original_video_path = self.video_path
@@ -623,10 +711,31 @@ class NudeVideoProcessor:
 
         if args and getattr(args, 'analyze_only', False):
             self._process_analysis_stream()
-        elif args and hasattr(args, 'boxes') and args.boxes:
+        elif self.force_full_cover:
+            self._process_forced_full_cover_stream()
+        elif args and hasattr(args, 'boxes') and args.boxes and not self.force_full_cover:
             self._process_boxes_video_stream(include_blur=hasattr(args, 'blur') and args.blur)
         else:
             self._process_video_stream()
+
+    def _process_forced_full_cover_stream(self):
+        """Write a cover-only video without creating an uncensored intermediate."""
+        self.cap.release()
+        covered_filename = f"{self.input_filename}_fully_covered.mp4"
+        covered_output_path = os.path.join(self.video_output_folder, covered_filename)
+        print(
+            "Forced full cover enabled; detector inference and the regular "
+            "processed-video output are skipped."
+        )
+        if not self._create_full_blur_video_stream(covered_output_path, 0.0, "generic"):
+            return
+
+        print(f"Fully covered video saved to: {covered_output_path}")
+        if args and getattr(args, "with_audio", False) and os.path.exists(self.video_path):
+            audio_filename = f"{self.input_filename}_fully_covered_with_audio.mp4"
+            output_with_audio = os.path.join(self.video_output_folder, audio_filename)
+            if self.add_audio_to_video(covered_output_path, self.video_path, output_with_audio):
+                print(f"Fully covered video with audio saved to: {output_with_audio}")
 
     def _frame_output_path(self, frame_count):
         return os.path.join(self.output_folder, f"frame_{frame_count}.jpg")
@@ -637,6 +746,15 @@ class NudeVideoProcessor:
             "total_exposed_boxes": 0,
             "frames_with_exposed": 0,
             "frames_with_required_labels": 0,
+            "face_observations": 0,
+            "underage_face_observations": 0,
+            "age_review_observations": 0,
+            "frames_with_underage": 0,
+            "frames_with_age_review": 0,
+            "frames_blocked_by_child_protection": 0,
+            "frames_blocked_nsfw_and_child": 0,
+            "frames_blocked_child_only": 0,
+            "frames_blocked_age_review": 0,
         }
 
     def _update_video_stats(self, stats, detections):
@@ -647,6 +765,38 @@ class NudeVideoProcessor:
             stats["frames_with_exposed"] += 1
         if exposed_count >= CONFIG['FULL_BLUR_LABELS']:
             stats["frames_with_required_labels"] += 1
+        demographic_detections = [d for d in detections if d.get("source") == "age_gender"]
+        underage_count = sum(1 for d in demographic_detections if d.get("is_underage"))
+        review_count = sum(1 for d in demographic_detections if d.get("review_required"))
+        stats["face_observations"] += len(demographic_detections)
+        stats["underage_face_observations"] += underage_count
+        stats["age_review_observations"] += review_count
+        if underage_count:
+            stats["frames_with_underage"] += 1
+        if review_count:
+            stats["frames_with_age_review"] += 1
+        frame_demographics = {
+            "underage_detected": bool(underage_count),
+            "review_required": bool(review_count),
+        }
+        nsfw_gate = protection_nsfw_summary(detections, self.protection_rules)
+        frame_policy = evaluate_protection_policy(
+            nsfw_gate["detected"],
+            frame_demographics,
+            block_if_nsfw_and_underage=self.protection_rules["BLOCK_IF_NSFW_AND_CHILD"],
+            block_if_underage=self.protection_rules["BLOCK_IF_CHILD"],
+            block_on_age_review=self.protection_rules["BLOCK_ON_AGE_REVIEW"],
+        )
+        frame_policy["nsfw_gate"] = nsfw_gate
+        if frame_policy["blocked"]:
+            stats["frames_blocked_by_child_protection"] += 1
+            reasons = set(frame_policy.get("reasons") or [])
+            if "NSFW_CONTENT_WITH_ESTIMATED_UNDERAGE_PERSON" in reasons:
+                stats["frames_blocked_nsfw_and_child"] += 1
+            elif "ESTIMATED_UNDERAGE_PERSON" in reasons:
+                stats["frames_blocked_child_only"] += 1
+            elif "AGE_ESTIMATE_NEAR_POLICY_THRESHOLD" in reasons:
+                stats["frames_blocked_age_review"] += 1
         return exposed_count
 
     def _metadata(self, total_frames=None, width=None, height=None):
@@ -672,6 +822,9 @@ class NudeVideoProcessor:
             (frames_with_exposed / total_frames * 100) if total_frames else 0.0,
             4,
         )
+        result["underage_detected"] = bool(result.get("underage_face_observations"))
+        result["child_protection_blocked"] = bool(result.get("frames_blocked_by_child_protection"))
+        result["age_values_are_estimates"] = True
         return result
 
     def _write_detection_outputs(self, events, stats, total_frames, width, height, force_report=False):
@@ -750,7 +903,7 @@ class NudeVideoProcessor:
     def _should_apply_full_blur_from_stats(self, stats):
         total_frames = stats["total_frames"]
         if total_frames <= 0:
-            return False, "", 0
+            return False, "", 0, "generic"
 
         frames_with_exposed = stats["frames_with_exposed"]
         nsfw_percentage = frames_with_exposed / total_frames * 100
@@ -761,19 +914,32 @@ class NudeVideoProcessor:
         print(f"\nFull blur analysis: {stats['frames_with_required_labels']} frames with {CONFIG['FULL_BLUR_LABELS']}+ exposed labels")
         print(f"Full blur threshold: {CONFIG['FULL_BLUR_FRAMES']} frames")
 
+        if self.force_full_cover:
+            return True, "Full cover was explicitly requested", nsfw_percentage, "generic"
+
+        if stats.get("frames_blocked_nsfw_and_child", 0) > 0:
+            return True, (
+                f"Child protection blocked {stats['frames_blocked_by_child_protection']} frame(s) "
+                "because the configured underage/NSFW policy matched"
+            ), nsfw_percentage, "nsfw_and_child"
+        if stats.get("frames_blocked_child_only", 0) > 0:
+            return True, "The configured underage-only policy matched", nsfw_percentage, "child"
+        if stats.get("frames_blocked_age_review", 0) > 0:
+            return True, "The configured age-review policy matched", nsfw_percentage, "review"
+
         if nsfw_percentage >= threshold_percentage:
-            return True, f"NSFW content ({nsfw_percentage:.1f}%) exceeds threshold ({threshold_percentage}%)", nsfw_percentage
+            return True, f"NSFW content ({nsfw_percentage:.1f}%) exceeds threshold ({threshold_percentage}%)", nsfw_percentage, "nsfw"
         if frames_with_exposed >= threshold_count:
-            return True, f"Frames with exposed content ({frames_with_exposed}) exceeds threshold ({threshold_count})", nsfw_percentage
+            return True, f"Frames with exposed content ({frames_with_exposed}) exceeds threshold ({threshold_count})", nsfw_percentage, "nsfw"
         if stats["frames_with_required_labels"] >= CONFIG['FULL_BLUR_FRAMES']:
             return True, (
                 f"{stats['frames_with_required_labels']} frames with {CONFIG['FULL_BLUR_LABELS']}+ exposed labels "
                 f"(threshold: {CONFIG['FULL_BLUR_FRAMES']} frames)"
-            ), nsfw_percentage
+            ), nsfw_percentage, "nsfw"
         if CONFIG['FULL_BLUR_FRAMES'] == 1 and stats["frames_with_required_labels"] > 0:
-            return True, f"Found {stats['frames_with_required_labels']} frames with {CONFIG['FULL_BLUR_LABELS']}+ exposed labels", nsfw_percentage
+            return True, f"Found {stats['frames_with_required_labels']} frames with {CONFIG['FULL_BLUR_LABELS']}+ exposed labels", nsfw_percentage, "nsfw"
 
-        return False, "", nsfw_percentage
+        return False, "", nsfw_percentage, "generic"
 
     def _process_frames_task(self):
         frame_count = 0
@@ -844,21 +1010,21 @@ class NudeVideoProcessor:
             print("No frames were read from the input video.")
             return
 
-        apply_full_blur, blur_reason, nsfw_percentage = self._should_apply_full_blur_from_stats(stats)
+        apply_full_blur, blur_reason, nsfw_percentage, full_cover_kind = self._should_apply_full_blur_from_stats(stats)
         if apply_full_blur:
             print(f"\nWARNING: {blur_reason}")
-            print("Applying full video blur as per monitoring rules")
-            blurred_filename = f"{self.input_filename}_fully_blurred.mp4"
+            print(f"Applying full video cover in {self.full_cover_options['mode']} mode")
+            blurred_filename = f"{self.input_filename}_fully_covered.mp4"
             blurred_output_path = os.path.join(self.video_output_folder, blurred_filename)
-            if self._create_full_blur_video_stream(blurred_output_path, nsfw_percentage):
-                print(f"Fully blurred video saved to: {blurred_output_path}")
+            if self._create_full_blur_video_stream(blurred_output_path, nsfw_percentage, full_cover_kind):
+                print(f"Fully covered video saved to: {blurred_output_path}")
 
                 if args and hasattr(args, 'with_audio') and args.with_audio and os.path.exists(self.video_path):
-                    blurred_audio_filename = f"{self.input_filename}_fully_blurred_with_audio.mp4"
+                    blurred_audio_filename = f"{self.input_filename}_fully_covered_with_audio.mp4"
                     blurred_with_audio = os.path.join(self.video_output_folder, blurred_audio_filename)
                     success = self.add_audio_to_video(blurred_output_path, self.video_path, blurred_with_audio)
                     if success:
-                        print(f"Fully blurred video with audio saved to: {blurred_with_audio}")
+                        print(f"Fully covered video with audio saved to: {blurred_with_audio}")
 
         if args and hasattr(args, 'with_audio') and args.with_audio and os.path.exists(self.video_path):
             audio_filename = f"{self.input_filename}{CONFIG['OUTPUT_VIDEO_AUDIO_SUFFIX']}"
@@ -876,10 +1042,10 @@ class NudeVideoProcessor:
         if args and hasattr(args, 'delete_frames') and args.delete_frames:
             print("No intermediate frame images were written in video mode.")
 
-    def _create_full_blur_video_stream(self, output_path, nsfw_percentage):
+    def _create_full_blur_video_stream(self, output_path, nsfw_percentage, full_cover_kind="nsfw"):
         source = open_video_capture(self.video_path)
         if not source.isOpened():
-            print(f"Could not reopen video for full blur pass: {self.video_path}")
+            print(f"Could not reopen video for full-cover pass: {self.video_path}")
             return False
 
         codec_preference = args.codec if args and hasattr(args, 'codec') else "mp4v"
@@ -887,7 +1053,7 @@ class NudeVideoProcessor:
         out = None
 
         try:
-            with tqdm(total=total_frames if total_frames > 0 else None, desc="Applying Full Video Blur", unit="frames", ncols=100, mininterval=0.5) as pbar:
+            with tqdm(total=total_frames if total_frames > 0 else None, desc="Applying Full Video Cover", unit="frames", ncols=100, mininterval=0.5) as pbar:
                 while True:
                     ret, frame = source.read()
                     if not ret:
@@ -907,6 +1073,7 @@ class NudeVideoProcessor:
                         nsfw_percentage=nsfw_percentage,
                         force_full_blur=True,
                         save_frame=False,
+                        full_cover_kind=full_cover_kind,
                     )
                     out.write(blurred_frame)
                     pbar.update(1)
@@ -1340,7 +1507,11 @@ class NudeVideoProcessor:
         Count the number of exposed regions in the detections.
         Returns the count of exposed labels.
         """
-        exposed_labels = [detection["class"] for detection in detections if detection_is_censorable(detection)]
+        exposed_labels = [
+            detection["class"]
+            for detection in detections
+            if detection_is_nsfw(detection) and self.should_apply_blur(detection["class"])
+        ]
         exposed_count = len(exposed_labels)
         return exposed_count
         
@@ -1465,11 +1636,16 @@ def parse_args():
     parser = argparse.ArgumentParser(description="Nude Detector")
     parser.add_argument("-i", "--input", type=str, help="Path to the input video", required=True)
     parser.add_argument("-o", "--output", type=str, default=None, help="Path to save the censored frames or video. If not provided, a default path will be used.")
+    parser.add_argument("-e", "--exception", type=str, default="BlurException.rule",
+                      help="Rule file or one of the ready-to-use rule_templates/*.rule files.")
     parser.add_argument("-t", "--task", type=str, choices=["frames", "video"], default="video", help="Specify the task (frames or video)")
     parser.add_argument("-vo", "--video_output", type=str, default="video_output", help="Path to the video output folder. Default is 'video_output'")
     parser.add_argument("-r", "--rule", type=parse_blur_rule, default=(0, 0), 
-                      help="Blur monitoring rule in format 'percentage/count'. If percentage of frames with NSFW content exceeds the percentage value OR if total frames with NSFW content exceeds count, a fully blurred version will be created.")
-    parser.add_argument("-b", "--boxes", action="store_true", help="Create a video with detection boxes from frames")
+                      help="Monitoring rule in format 'percentage/count'. If either threshold is reached, a fully covered version is created using --full-cover-mode.")
+    parser.add_argument("-b", "--boxes", action=argparse.BooleanOptionalAction, default=False,
+                      help="Create a video with detection boxes (use --no-boxes to disable explicitly).")
+    parser.add_argument("--save-boxes-copy", action=argparse.BooleanOptionalAction, default=False,
+                      help="In frames mode, save an unredacted _boxes.jpg debug copy (default: disabled).")
     parser.add_argument("--blur", action="store_true", help="Apply blur to detected regions when using -b option")
     parser.add_argument("-a", "--with-audio", action="store_true", help="Include original audio in the output video")
     parser.add_argument("-c", "--codec", type=str, choices=["mp4v", "avc1", "xvid", "mjpg"], default="mp4v",
@@ -1481,7 +1657,7 @@ def parse_args():
     parser.add_argument("--enhanced-blur", action="store_true",
                       help="Use enhanced blur that completely obscures content (stronger blur effect)")
     parser.add_argument("-fbr", "--full-blur-rule", type=str, default=None,
-                      help="Full blur rule in format 'labels/frames'. If exposed labels >= labels count in at least frames count, a fully blurred video will be created.")
+                      help="Full-cover rule in format 'labels/frames'. When reached, a fully covered video is created using --full-cover-mode.")
     parser.add_argument("--color", action="store_true",
                       help="Use solid color instead of blur to mask NSFW content")
     parser.add_argument("--mask-color", type=str, default="0,0,0", 
@@ -1504,14 +1680,48 @@ def parse_args():
                       help="Seconds between detections before starting a new editor marker. Default is 1.0.")
     parser.add_argument("--providers", type=str, default=None,
                       help="Comma-separated ONNX Runtime providers, e.g. CUDAExecutionProvider,CPUExecutionProvider")
-    parser.add_argument("--detectors", type=str, default="nude",
-                      help="Detector set to use: nude, objects, or both. Comma-separated values are accepted.")
+    parser.add_argument("--nsfw-model", type=str, default=None,
+                      help="Optional path to the SafeVision NSFW ONNX model (default: Models/best.onnx).")
+    parser.add_argument("--detectors", type=str, default="nude,age,gender",
+                      help="Checks to run: nude, age, gender, objects, demographics, protection, or all.")
     parser.add_argument("--object-model", type=str, default=DEFAULT_OBJECT_MODEL,
                       help="Path to the optional safety-object ONNX model.")
     parser.add_argument("--object-labels", type=str, default=DEFAULT_OBJECT_LABELS,
                       help="Path to the safety-object labels JSON file.")
     parser.add_argument("--object-threshold", type=float, default=0.25,
                       help="Minimum confidence for safety-object detections.")
+    parser.add_argument("--age-gender-model", type=str, default=str(default_age_gender_model_path()),
+                      help="Path to the age/gender ONNX model.")
+    parser.add_argument("--underage-age", type=float, default=None,
+                      help="Estimated underage threshold. Defaults to BlurException.rule (18).")
+    parser.add_argument("--age-review-margin", type=float, default=None,
+                      help="Review band above the underage threshold. Defaults to the rule file (3 years).")
+    parser.add_argument("--min-face-size", type=int, default=32,
+                      help="Minimum face size in pixels for fallback face detection.")
+    parser.add_argument("--face-padding", type=float, default=0.18,
+                      help="Padding around face crops as a fraction of face size.")
+    parser.add_argument("--full-cover-mode", "--full-blur-mode", choices=["blur", "gray", "black", "color"], default=None,
+                      help="Whole-video cover mode. gray/black/color replace every source pixel.")
+    parser.add_argument("--full-cover-color", default=None,
+                      help="Custom full-cover color as B,G,R or #RRGGBB.")
+    parser.add_argument("--full-cover-text-color", default=None,
+                      help="Centered warning text color as B,G,R or #RRGGBB.")
+    parser.add_argument("--full-cover-text", action=argparse.BooleanOptionalAction, default=None,
+                      help="Show or hide the centered full-cover warning on every output frame.")
+    parser.add_argument("--full-cover-message", default=None,
+                      help="Override the automatic policy-specific warning for this run.")
+    parser.add_argument("--force-full-cover", action="store_true",
+                      help="Always create a fully covered video, even if monitoring thresholds do not match.")
+    parser.add_argument("--block-if-nsfw-and-child", action=argparse.BooleanOptionalAction, default=None,
+                      help="Override BLOCK_IF_NSFW_AND_CHILD from the selected rule file.")
+    parser.add_argument("--block-if-child", action=argparse.BooleanOptionalAction, default=None,
+                      help="Override BLOCK_IF_CHILD from the selected rule file.")
+    parser.add_argument("--block-on-age-review", action=argparse.BooleanOptionalAction, default=None,
+                      help="Override BLOCK_ON_AGE_REVIEW from the selected rule file.")
+    parser.add_argument("--child-nsfw-min-risk", choices=["LOW", "MODERATE", "HIGH", "CRITICAL"], default=None,
+                      help="Minimum NSFW risk tier for the compound underage + NSFW rule.")
+    parser.add_argument("--child-nsfw-min-confidence", type=float, default=None,
+                      help="Minimum NSFW confidence (0..1) for the compound rule.")
     return parser.parse_args()
 
 # Global args variable for access across classes
@@ -1688,16 +1898,45 @@ if __name__ == "__main__":
     if args.task == "video" and args.with_audio:
         check_ffmpeg_availability(args.ffmpeg_path)
 
-    video_processor = NudeVideoProcessor(
-        args.input,
-        args.output,
-        task=args.task,
-        providers=parse_provider_list(args.providers),
-        video_output_folder=video_output_folder,
-        blur_rule=rule,
-        detectors=args.detectors,
-        object_model=args.object_model,
-        object_labels=args.object_labels,
-        object_threshold=args.object_threshold,
-    )
+    try:
+        video_processor = NudeVideoProcessor(
+            args.input,
+            args.output,
+            task=args.task,
+            providers=parse_provider_list(args.providers),
+            video_output_folder=video_output_folder,
+            blur_rule=rule,
+            detectors=args.detectors,
+            object_model=args.object_model,
+            object_labels=args.object_labels,
+            object_threshold=args.object_threshold,
+            age_gender_model=args.age_gender_model,
+            underage_age=args.underage_age,
+            age_review_margin=args.age_review_margin,
+            min_face_size=args.min_face_size,
+            face_padding=args.face_padding,
+            rule_file=args.exception,
+            nsfw_model=args.nsfw_model,
+            protection_overrides={
+                "BLOCK_IF_NSFW_AND_CHILD": args.block_if_nsfw_and_child,
+                "BLOCK_IF_CHILD": args.block_if_child,
+                "BLOCK_ON_AGE_REVIEW": args.block_on_age_review,
+                "PROTECTION_NSFW_MIN_RISK": args.child_nsfw_min_risk,
+                "PROTECTION_NSFW_MIN_CONFIDENCE": (
+                    max(0.0, min(1.0, args.child_nsfw_min_confidence))
+                    if args.child_nsfw_min_confidence is not None else None
+                ),
+            },
+            full_cover_overrides={
+                "FULL_COVER_MODE": args.full_cover_mode,
+                "FULL_COVER_COLOR": args.full_cover_color,
+                "FULL_COVER_TEXT_COLOR": args.full_cover_text_color,
+                "FULL_COVER_SHOW_TEXT": args.full_cover_text,
+            },
+            full_cover_message_override=args.full_cover_message,
+            save_boxes_copy=args.save_boxes_copy,
+            force_full_cover=args.force_full_cover,
+        )
+    except AgeGenderModelMissingError as exc:
+        raise SystemExit(f"ERROR: {exc}") from None
     video_processor.process_video()

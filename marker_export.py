@@ -43,8 +43,7 @@ def detection_events_from_frame(detections, frame_index, fps):
         label = detection.get("class", "UNKNOWN")
         box = detection.get("box", [0, 0, 0, 0])
         score = float(detection.get("score", 0.0))
-        events.append(
-            {
+        event = {
                 "frame": int(frame_index),
                 "time": round(time_seconds, 6),
                 "class": label,
@@ -55,7 +54,20 @@ def detection_events_from_frame(detections, frame_index, fps):
                 "score": score,
                 "box": [int(value) for value in box],
             }
-        )
+        for key in (
+            "age_estimate",
+            "age_confidence",
+            "age_threshold",
+            "is_underage",
+            "review_required",
+            "gender",
+            "gender_confidence",
+            "score_semantics",
+            "face_source",
+        ):
+            if key in detection:
+                event[key] = detection.get(key)
+        events.append(event)
     return events
 
 
@@ -91,7 +103,11 @@ def write_json_report(path, events, metadata=None, stats=None):
 
 def write_csv_report(path, events):
     os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
-    fieldnames = ["frame", "time", "class", "category", "source", "model", "censor", "score", "x", "y", "w", "h"]
+    fieldnames = [
+        "frame", "time", "class", "category", "source", "model", "censor", "score",
+        "age_estimate", "age_confidence", "age_threshold", "is_underage", "review_required", "gender",
+        "gender_confidence", "score_semantics", "face_source", "x", "y", "w", "h",
+    ]
     with open(path, "w", encoding="utf-8", newline="") as report_file:
         writer = csv.DictWriter(report_file, fieldnames=fieldnames)
         writer.writeheader()
@@ -107,6 +123,15 @@ def write_csv_report(path, events):
                     "model": event.get("model", ""),
                     "censor": "true" if event.get("censor", False) else "false",
                     "score": f"{float(event.get('score', 0.0)):.6f}",
+                    "age_estimate": event.get("age_estimate", ""),
+                    "age_confidence": event.get("age_confidence", ""),
+                    "age_threshold": event.get("age_threshold", ""),
+                    "is_underage": event.get("is_underage", ""),
+                    "review_required": event.get("review_required", ""),
+                    "gender": event.get("gender", ""),
+                    "gender_confidence": event.get("gender_confidence", ""),
+                    "score_semantics": event.get("score_semantics", ""),
+                    "face_source": event.get("face_source", ""),
                     "x": x,
                     "y": y,
                     "w": w,

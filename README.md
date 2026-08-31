@@ -1,1552 +1,2126 @@
+<a id="top"></a>
 
-# ![SafeVision Logo](https://i.ibb.co/d4LqhX4/Safe-Vision-2.png)
+<div align="center">
+  <a href="https://github.com/im-syn/SafeVision">
+    <img src="https://i.ibb.co/d4LqhX4/Safe-Vision-2.png" alt="SafeVision Logo" width="760">
+  </a>
 
-![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-blue)
-![Python](https://img.shields.io/badge/python-3.8%2B-yellow)
-![License](https://img.shields.io/github/license/im-syn/safevision)
-![Status](https://img.shields.io/badge/stability-stable-brightgreen)
-![API](https://img.shields.io/badge/API-REST%20Endpoint-green)
-![GUI](https://img.shields.io/badge/GUI-Multiple%20Interfaces-purple)
+  <h1>SafeVision</h1>
 
----
+  <p><strong>Local-first visual safety for images, video, cameras, screens, streams, and web APIs.</strong></p>
+  <p>Run NSFW detection, estimated-age review, model-reported gender classification, policy evaluation, and privacy-safe rendering from one ONNX-powered toolkit.</p>
 
-## Overview
+  <p>
+    <a href="https://www.python.org/"><img alt="Python 3.10+" src="https://img.shields.io/badge/Python-3.10%2B-3776AB?style=for-the-badge&logo=python&logoColor=white"></a>
+    <a href="https://onnxruntime.ai/"><img alt="ONNX Runtime 1.18+" src="https://img.shields.io/badge/ONNX_Runtime-1.18%2B-005CED?style=for-the-badge&logo=onnx&logoColor=white"></a>
+    <a href="LICENSE"><img alt="Source license" src="https://img.shields.io/github/license/im-syn/SafeVision?style=for-the-badge&label=Source&color=0ea5e9"></a>
+    <a href="Models/README.md"><img alt="Mixed model licenses" src="https://img.shields.io/badge/Models-Mixed_Licenses-F59E0B?style=for-the-badge"></a>
+    <img alt="Platforms" src="https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS-2563EB?style=for-the-badge">
+  </p>
 
-**SafeVision** is a comprehensive, multi-modal content safety suite powered by advanced ONNX deep learning models. This sophisticated system provides real-time nudity detection, content filtering, and automated censoring across images, videos, live streams, and camera feeds. With multiple interfaces including CLI tools, modern GUI applications, live monitoring, streaming integration, and RESTful API endpoints, SafeVision offers enterprise-grade content moderation capabilities for various use cases.
+  <p>
+    <img alt="REST API" src="https://img.shields.io/badge/API-Flask%20%2B%20Waitress-16A34A?style=flat-square&logo=flask&logoColor=white">
+    <img alt="Desktop GUI" src="https://img.shields.io/badge/GUI-PyQt5-7C3AED?style=flat-square&logo=qt&logoColor=white">
+    <img alt="Rule presets" src="https://img.shields.io/badge/Rule_Presets-50-F59E0B?style=flat-square">
+    <img alt="Focused tests" src="https://img.shields.io/badge/Focused_Tests-15-22C55E?style=flat-square">
+    <img alt="Status" src="https://img.shields.io/badge/Status-Active_Development-10B981?style=flat-square">
+    <a href="https://github.com/im-syn/SafeVision/issues"><img alt="Issues" src="https://img.shields.io/github/issues/im-syn/SafeVision?style=flat-square"></a>
+    <a href="https://github.com/im-syn/SafeVision/stargazers"><img alt="GitHub stars" src="https://img.shields.io/github/stars/im-syn/SafeVision?style=flat-square"></a>
+    <a href="https://github.com/im-syn/SafeVision/network/members"><img alt="GitHub forks" src="https://img.shields.io/github/forks/im-syn/SafeVision?style=flat-square"></a>
+  </p>
 
-### 🎯 Key Capabilities
-- **Multi-Format Support**: Images, videos, live camera feeds, screen capture
-- **Real-time Processing**: Live detection with sub-second response times
-- **Multiple Interfaces**: CLI, GUI, API server, screen overlay, streaming integration
-- **Advanced AI Models**: ONNX-optimized nudity/body detection plus optional safety-object detection
-- **Professional Features**: Batch processing, custom rules, alert systems, logging
-- **Cross-Platform**: Windows, Linux, macOS support with optimized performance
-
----
-
-## 📑 Table of Contents
-
-### 🚀 Getting Started
-* [🔧 Installation & Setup](#-installation--setup)
-* [📁 Project Structure](#-project-structure)
-* [⚙️ Configuration](#️-configuration)
-* [🔧 Command-Line Arguments Reference](#-command-line-arguments-reference)
-
-### 🛠️ Core Applications
-* [🖼️ Image Processing (main.py)](#️-image-processing-mainpy)
-* [🎥 Video Processing (video.py)](#-video-processing-videopy)
-* [📺 Live Camera Detection (live.py)](#-live-camera-detection-livepy)
-* [🎮 Live Streaming (live_streamer.py)](#-live-streaming-live_streamerpy)
-
-### 🎨 User Interfaces
-* [🖼️ Modern GUI (safevision_gui.py)](#️-modern-gui-safevision_guipy)
-* [🌐 REST API Server (safevision_api.py)](#-rest-api-server-safevision_apipy)
-
-### ⚙️ Advanced Features
-* [📋 Blur Exception Rules](#-blur-exception-rules)
-* [🚬 Safety Object Model](#-safety-object-model-smoking-alcohol-drugs)
-* [🔍 Detection Models & Labels](#-detection-models--labels)
-* [📊 Logging & Monitoring](#-logging--monitoring)
-
-### 📖 Documentation
-* [🏗️ How It Works](#️-how-it-works)
-* [📂 Output Directory Structure](#-output-directory-structure)
-* [🔧 Troubleshooting](#-troubleshooting)
-* [📷 Examples & Demos](#-examples--demos)
+  <p>
+    <a href="#quick-start">Quick start</a> ·
+    <a href="#choose-your-interface">Choose an interface</a> ·
+    <a href="#image-processing">Images</a> ·
+    <a href="#video-processing">Videos</a> ·
+    <a href="#desktop-gui">GUI</a> ·
+    <a href="#web-api">Web API</a> ·
+    <a href="#rule-templates">Rules</a> ·
+    <a href="docs/README.md">Docs</a> ·
+    <a href="#troubleshooting">Help</a>
+  </p>
+</div>
 
 ---
 
-## ⭐ Features
+> [!TIP]
+> **New here?** Start with `python safeVisionCLI.py status`, then process one
+> image with the balanced preset. The default workflow runs NSFW, estimated
+> age, and model-reported gender together while keeping common armpit/body
+> context from causing a compound child-protection block.
 
-### 🤖 AI-Powered Detection
-- **Advanced ONNX Models**: Optimized deep learning models for accurate content detection
-- **Dual Model Detection**: Run nudity/body detection, safety-object detection, or both in one pass
-- **33 Censor Labels**: 18 nudity/body labels plus 15 smoking/alcohol/drug object labels
-- **Risk Assessment**: Automatic severity classification (Safe, Low, Moderate, High, Critical)
-- **Real-time Processing**: Sub-second analysis with GPU acceleration support
-- **Confidence Scoring**: Adjustable detection thresholds for different use cases
+<table>
+  <tr>
+    <td width="25%" valign="top">
+      <h3>🧠 Three checks</h3>
+      <p>NSFW regions, estimated age, and model-reported binary gender can run together or independently.</p>
+    </td>
+    <td width="25%" valign="top">
+      <h3>🛡️ Policy-aware</h3>
+      <p>Compound rules separate ordinary body context from qualified NSFW evidence before blocking.</p>
+    </td>
+    <td width="25%" valign="top">
+      <h3>🎭 Private output</h3>
+      <p>Choose regional blur, masks, strong full blur, or opaque gray, black, and custom-color covers.</p>
+    </td>
+    <td width="25%" valign="top">
+      <h3>🔌 Many surfaces</h3>
+      <p>CLI, desktop GUI, live camera, Screen Guard, OBS streamer, CI, local API, and hosted API.</p>
+    </td>
+  </tr>
+</table>
 
-### 🎯 Content Processing
-- **Multi-Format Support**: Images (JPG, PNG, BMP, TIFF), Videos (MP4, AVI, MOV, MKV)
-- **Live Camera Feeds**: Real-time webcam and USB camera processing
-- **Screen Capture**: Monitor desktop activity with overlay detection
-- **Batch Processing**: Process multiple files simultaneously
-- **Audio Preservation**: Maintain original audio in processed videos
+> [!IMPORTANT]
+> **Estimated age is not legal age verification.** The age model returns an
+> estimate and no age-confidence value, and it can be less accurate for
+> children. Use human review for consequential decisions. The gender field is
+> the model's binary visual classification and may not represent a person's
+> identity.
 
-### 🛡️ Censoring & Safety
-- **Intelligent Blurring**: Selective or full-frame blur with adjustable strength
-- **Color Masking**: Solid color overlay as alternative to blur
-- **Custom Exception Rules**: Define what content to blur or ignore
-- **Protection Modes**: Kids Safety, Streamer, Nudity Fighter, and custom modes
-- **Alert Systems**: Real-time notifications and emergency actions
+<a id="contents"></a>
 
-### 🖥️ User Interfaces
-- **Modern PyQt5 GUI**: Professional interface with drag-drop, themes, and live preview
-- **Command Line Tools**: Full CLI support for automation and scripting
-- **Screen Overlay**: Transparent overlay for monitoring any application
-- **REST API Server**: HTTP endpoints for integration with other applications
-- **Streaming Integration**: OBS and live streaming platform support
+## 🧭 Explore the project
 
-### 📊 Professional Features
-- **Detailed Logging**: Comprehensive detection logs with timestamps and metadata
-- **Performance Monitoring**: FPS tracking, memory usage, and system optimization
-- **Configuration Management**: Persistent settings and customizable parameters
-- **Report Generation**: Export detection reports in multiple formats
-- **Multi-threading**: Optimized performance with parallel processing
+<table>
+  <tr>
+    <td width="50%" valign="top">
+      <h3>🚀 Start and operate</h3>
+      <ul>
+        <li><a href="#whats-new">What changed</a></li>
+        <li><a href="#architecture">How SafeVision works</a></li>
+        <li><a href="#project-map">Project map</a></li>
+        <li><a href="#quick-start">Installation and first run</a></li>
+        <li><a href="#choose-your-interface">Interface chooser</a></li>
+        <li><a href="#detector-selection">Detector selection</a></li>
+      </ul>
+    </td>
+    <td width="50%" valign="top">
+      <h3>🛠️ Process and integrate</h3>
+      <ul>
+        <li><a href="#image-processing">Image processing</a></li>
+        <li><a href="#video-processing">Video processing</a></li>
+        <li><a href="#desktop-gui">Desktop GUI</a></li>
+        <li><a href="#live-tools">Camera, Screen Guard, and OBS</a></li>
+        <li><a href="#web-api">REST API and deployment</a></li>
+        <li><a href="#configuration">Settings, outputs, and performance</a></li>
+      </ul>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <h3>🛡️ Policies and privacy</h3>
+      <ul>
+        <li><a href="#child-protection">Child-protection policy</a></li>
+        <li><a href="#rule-templates">50 ready-made rule templates</a></li>
+        <li><a href="#full-cover-reference">Full-cover modes and messages</a></li>
+        <li><a href="#output-privacy">Boxes, copies, and safe outputs</a></li>
+        <li><a href="#responsible-use">Responsible-use boundaries</a></li>
+      </ul>
+    </td>
+    <td width="50%" valign="top">
+      <h3>📚 Learn and contribute</h3>
+      <ul>
+        <li><a href="#command-cookbook">Command cookbook</a></li>
+        <li><a href="#demos">Demos</a></li>
+        <li><a href="#troubleshooting">Troubleshooting</a></li>
+        <li><a href="#testing">Testing</a></li>
+        <li><a href="#contributing">Contributing</a></li>
+        <li><a href="#support">Maintainer and support</a></li>
+      </ul>
+    </td>
+  </tr>
+</table>
 
-### 🔧 Development & Integration
-- **RESTful API**: Complete API server with JSON responses and file upload support
-- **SDK Components**: Reusable classes for custom integration
-- **Event Hooks**: Callback system for custom actions on detection
-- **Plugin Architecture**: Extensible design for custom detection rules
-- **Cross-platform**: Windows, Linux, macOS support with native installers
+<a id="whats-new"></a>
 
----
+## ✨ What changed from the older SafeVision release
 
-## 🔧 Installation & Setup
+The older public version centered on NSFW boxes and blur. This update keeps
+those commands but adds the pieces needed for a child-aware moderation
+workflow:
 
-### 📋 System Requirements
+- `nude,age,gender` is now the default check set. Each check can still be
+  enabled or disabled independently.
+- the ready-made ONNX age/gender model replaces the old unused
+  `best_gender.onnx` path;
+- a qualified NSFW gate prevents ordinary exposed-armpit/body-context
+  detections from turning a safe family photo into an underage + NSFW block;
+- image and video policy blocks can use strong blur, solid gray, solid black,
+  or a custom solid color, with reason-specific centered text;
+- box display, the separate unredacted boxes copy, and the clean blur copy are
+  independently controlled;
+- `main.py`, `video.py`, `safeVisionCLI.py`, the local API, and the `vision2`
+  admin/API use the same policy names;
+- the local HTTP service is organized under `SafeVision Web API/`, while
+  `python safevision_api.py` remains a compatibility command;
+- the large desktop and real-time implementations are organized under `apps/`,
+  while the familiar root GUI/live commands remain compatibility launchers;
+- 50 complete `.rule` presets and a catalog are included under
+  `rule_templates/`;
+- every functional/runtime folder now includes a purpose-specific README, with
+  dedicated architecture and licensing guides under `docs/`;
+- generated media, runtime folders, converted models, local `.env` files, and
+  the large age/gender model are kept out of normal Git commits.
 
-**Minimum Requirements:**
-- Python 3.8+ (3.9+ recommended)
-- 4GB RAM (8GB+ recommended)
-- 2GB free disk space
-- CPU with AVX2 support (Intel 2013+, AMD 2017+)
+See [CHANGELOG.md](CHANGELOG.md) for the file-level migration notes.
 
-**Recommended for Optimal Performance:**
-- Python 3.10+
-- 16GB+ RAM
-- NVIDIA GPU with CUDA support
-- SSD storage for faster model loading
+<details>
+<summary><strong>🔎 Open the old-to-new migration snapshot</strong></summary>
 
-### 🚀 Quick Installation
+| Area | Older workflow | Current workflow |
+|---|---|---|
+| Default checks | NSFW/body labels | NSFW + estimated age + model-reported gender |
+| Child-aware decisions | No compound policy | Qualified NSFW evidence + estimated-underage policy |
+| Common body context | Could contribute to broad censoring | Balanced rules exclude exposed armpits from censoring and compound blocking |
+| Whole-media output | Full blur | Strong blur, opaque gray, black, or custom color |
+| Output copies | Detection and blur copies were coupled | Final boxes, reviewer copy, and clean censor copy are independent |
+| Rules | One active exception file | Active profiles plus 50 documented templates |
+| Local API | Root-level application file | Deployable `SafeVision Web API/` with `.env`, Waitress, and result downloads |
+| Hosted API | NSFW-centered configuration | Independent NSFW/age/gender checks and admin-controlled protection rendering |
 
-```bash
-# Clone the repository
-git clone https://github.com/im-syn/safevision.git
-cd safevision
+</details>
 
-# Install core dependencies
-pip install -r requirements.txt
+<p align="right"><a href="#top">⬆️ Back to top</a></p>
 
-# For GUI applications (PyQt5 interface)
-pip install -r requirements_gui.txt
+<a id="architecture"></a>
 
-# For API server functionality
-pip install -r requirements_api.txt
+## 🏗️ How SafeVision works
 
-# For live streaming features
-pip install -r requirements_streaming.txt
+SafeVision keeps detection, policy, and rendering separate. This matters:
+detection describes what the models observed, policy decides what that means
+for the selected workflow, and rendering decides what a viewer is allowed to
+see.
+
+```mermaid
+flowchart LR
+    A[Image, video, camera, screen, URL] --> B{Selected checks}
+    B --> C[NSFW/body ONNX]
+    B --> D[Age + gender ONNX]
+    B --> E[Optional safety-object ONNX]
+    C --> F[Normalized detections]
+    D --> F
+    E --> F
+    F --> G[BlurException.rule]
+    G --> H[Qualified NSFW gate]
+    H --> I[Protection policy]
+    I --> J{Render choice}
+    J --> K[JSON / logs / reports]
+    J --> L[Boxes or reviewer copy]
+    J --> M[Regional blur or mask]
+    J --> N[Full blur / gray / black / color]
 ```
 
-### 📦 Required Models
+### 🧩 The decision path
 
-SafeVision requires ONNX model files in the `Models/` directory:
-
-```bash
-# Create Models directory
-mkdir Models
-
-# Place your models (obtain from official source):
-# Models/best.onnx                    - Main nudity/body detection model
-# Models/best_gender.onnx             - Gender/age detection model (optional)
-# Models/safety_objects.onnx          - Optional smoking/alcohol/drug object model
-# Models/safety_objects.labels.json   - Labels/categories for safety_objects.onnx
+```mermaid
+flowchart TD
+    A[Face age estimate below threshold?] -->|No| B[Allow or review normal NSFW result]
+    A -->|Yes| C{BLOCK_IF_CHILD enabled?}
+    C -->|Yes| D[Block: estimated-underage policy]
+    C -->|No| E{Qualified NSFW evidence present?}
+    E -->|No| F[Report estimate; do not compound-block]
+    E -->|Yes| G{Risk and confidence meet rule?}
+    G -->|No| F
+    G -->|Yes| H[Block: NSFW + estimated-underage]
+    D --> I[Apply configured full cover]
+    H --> I
 ```
 
-> **📥 Model Download**: Contact the maintainer or check releases for official model files.
+> [!NOTE]
+> A `CHILD` observation is informational under the balanced defaults. It does
+> not become a compound block unless qualified NSFW evidence also meets the
+> configured risk and confidence gate. Set `BLOCK_IF_CHILD=true` only for a
+> workflow that intentionally blocks every estimated-underage result.
 
-The safety-object model is optional. If it is present, image and video processing can use `--detectors objects` or `--detectors both`. If it is missing, keep the default `--detectors nude` mode.
+### ⚙️ Processing stages
 
-`safety_objects.labels.json` must stay in sync with the ONNX class order. The current labels are:
+| Stage | Owner | What it does | What it does **not** do |
+|---|---|---|---|
+| Detection | ONNX models | Produces boxes, labels, scores, age estimates, and gender probability | Decide legality or identity |
+| Normalization | Shared Python utilities | Converts every result into common detection and demographic records | Hide the input |
+| Rule evaluation | `.rule` file + overrides | Enables labels, thresholds, policy gates, cover text, and cover mode | Load a disabled model |
+| Rendering | Image/video/API renderer | Draws boxes, censors regions, or replaces the complete frame | Change the underlying model result |
+| Reporting | Logs, JSON, CSV, EDL, FCPXML | Records evidence, decisions, timestamps, and outputs | Count unique people across video frames |
+
+<p align="right"><a href="#top">⬆️ Back to top</a></p>
+
+<a id="project-map"></a>
+
+## 🗂️ Project map
 
 ```text
-cigarette, cigar, vape, smoking_pipe, joint,
-alcohol_bottle, beer_bottle, wine_glass, beer_glass, cocktail_glass,
-pill, pill_bottle, syringe, cannabis_leaf, drug_bag
+SafeVision/
+├── main.py                         Image detection and rendering CLI
+├── video.py                        Video analysis, censoring, reports, and audio workflow
+├── safeVisionCLI.py                Interactive console and command wrapper
+├── SafeVisionGUI.py                Stable desktop compatibility launcher
+├── live.py                         Stable camera compatibility launcher
+├── safeVisionScreenGuard.py        Stable Screen Guard compatibility launcher
+├── live_streamer.py                Stable streamer compatibility launcher
+│
+├── apps/
+│   ├── README.md                   Application map and compatibility contract
+│   ├── desktop/
+│   │   ├── SafeVisionGUI.py        Maintained PyQt5 desktop implementation
+│   │   └── README.md               Complete GUI manual
+│   └── live/
+│       ├── live.py                 Maintained live-camera implementation
+│       ├── safeVisionScreenGuard.py
+│       ├── live_streamer.py        OBS and virtual-camera implementation
+│       └── README.md               Complete real-time tools manual
+│
+├── age_gender_detector.py          Batched face age/gender ONNX adapter
+├── object_detector.py              Optional smoking/alcohol/drug object adapter
+├── safevision_utils.py             Shared providers, rules, risk gate, and rendering helpers
+├── marker_export.py                JSON/CSV/EDL/FCPXML reporting helpers
+│
+├── BlurException.rule              Active label, child-policy, and full-cover rules
+├── rule_templates/
+│   ├── 01_balanced_default.rule    Recommended starting point
+│   ├── ...                         48 additional workflow presets
+│   ├── 50_custom_brand_cover.rule  Custom-color example
+│   └── README.md                   Complete template catalog
+│
+├── Models/
+│   ├── best.onnx                   NSFW/body-region detector
+│   ├── onnx-community...onnx       Local age/gender model; ignored by Git
+│   ├── safety_objects.onnx         Optional safety-object detector
+│   ├── safety_objects.labels.json  Safety-object class metadata
+│   └── README.md                   Provenance, license, metadata, and hashes
+│
+├── SafeVision Web API/
+│   ├── app.py                      Flask API and media renderers
+│   ├── web_config.py               Environment-backed settings
+│   ├── .env.example                Deployment template
+│   ├── wsgi.py                     WSGI entry point
+│   ├── start.ps1                   Waitress launcher
+│   ├── requirements.txt            Web-only installation set
+│   ├── README.md                   Endpoint and deployment manual
+│   └── runtime/README.md           Ignored-data boundary and operations
+│
+├── settings/
+│   ├── configs.json                Persistent console settings and profiles
+│   └── README.md                   Schema and precedence guide
+├── tests/
+│   ├── test_age_gender_detector.py Focused synthetic regressions
+│   └── README.md                   Test and release guide
+├── docs/
+│   ├── README.md                   Documentation center
+│   ├── PROJECT_STRUCTURE.md        Architecture and ownership map
+│   └── LICENSING.md                Code/model/commercial-use boundaries
+├── input/, output/, Blur/          Runtime folders with privacy READMEs
+├── Prosses/, Logs/                 Restricted reviewer/evidence folders
+├── CHILD_PROTECTION.md              Model and policy contract
+├── CHANGELOG.md                     Migration details
+├── LICENSE                          Exact SafeVision source terms
+├── NOTICE                           Attribution and model notices
+└── README.md                        You are here
 ```
 
-### Safety Object Model Training
+<details>
+<summary><strong>📦 Runtime and generated folders</strong></summary>
 
-The current `Models/safety_objects.onnx` model was trained as a second YOLO object-detection model. It does not replace the nudity/body model; it adds visible smoking, alcohol, and drug-related object detection.
+| Folder | Purpose | Safe to publish? | Git behavior |
+|---|---|---:|---|
+| `input/` | Optional local source media | Usually no | Contents ignored |
+| `output/` | Requested final image result | Depends on policy | Contents ignored |
+| `Blur/` | Separate clean censored image | Usually safer | Contents ignored |
+| `Prosses/` | Unredacted boxes/reviewer copy | **No** | Contents ignored |
+| `Logs/` | Text logs and analysis JSON | Review first | Contents ignored |
+| `video_output/` | Video results, reports, markers | Depends on result | Contents ignored |
+| `SafeVision Web API/runtime/` | API uploads, results, temporary downloads | **No** | Contents ignored |
 
-Training workflow used:
+</details>
+
+> [!NOTE]
+> The root GUI/live filenames are intentionally retained as small launchers, so
+> existing tutorials and automation keep working. New application development
+> belongs in [`apps/`](apps/README.md).
+
+<a id="choose-your-interface"></a>
+
+## 🎛️ Choose your interface
+
+| You want to… | Best entry point | Start command | Typical output |
+|---|---|---|---|
+| Process one image | `main.py` | `python main.py -i photo.jpg -b --no-boxes` | Image + analysis JSON |
+| Process or analyze video | `video.py` | `python video.py -i clip.mp4 --save-report` | Video + JSON/CSV |
+| Use one friendly console | `safeVisionCLI.py` | `python safeVisionCLI.py` | Guided CLI workflow |
+| Work visually | `SafeVisionGUI.py` | `python SafeVisionGUI.py` | Previewed image/video output |
+| Inspect a webcam | `live.py` | `python live.py -c 0 --demographics` | Live local preview |
+| Protect a desktop monitor | `safeVisionScreenGuard.py` | `python safeVisionScreenGuard.py --list-monitors` | Overlay/block/blur |
+| Feed OBS or a virtual camera | `live_streamer.py` | `python live_streamer.py -i camera` | Stream/scene actions |
+| Integrate over HTTP | `safevision_api.py` | `python safevision_api.py` | JSON + downloadable result |
+| Add an upload gate to CI | `main.py` | `python main.py -i photo.jpg --fail-on-policy` | Exit code + JSON evidence |
+
+Detailed interface manuals:
+
+- [Desktop GUI](apps/desktop/README.md)
+- [Live camera, Screen Guard, and OBS](apps/live/README.md)
+- [Local Web API](SafeVision%20Web%20API/README.md)
+- [Application package and compatibility](apps/README.md)
+- [Complete documentation center](docs/README.md)
+
+### 🧰 Capability matrix
+
+| Surface | NSFW | Age | Gender | Objects | Regional censor | Full cover | Reports | Audio |
+|---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
+| Image CLI | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | JSON/log | — |
+| Video CLI | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | JSON/CSV/markers | ✅ FFmpeg |
+| Desktop GUI | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ FFmpeg |
+| Live camera | ✅ | ✅ | ✅ | Optional | ✅ | Policy block | Runtime | Live |
+| Screen Guard | ✅ | ✅ | ✅ | Optional | ✅ | Policy block | Runtime | — |
+| Live Streamer | ✅ | ✅ | ✅ | Optional | ✅ | Policy block | Runtime | Stream |
+| Local Web API | ✅ | ✅ | ✅ | Configurable | ✅ | ✅ | JSON | No¹ |
+| `vision2` API/admin | ✅ | ✅ | ✅ | Existing service config | ✅ | ✅ | JSON/admin | Configurable |
+
+<sub>¹ The local OpenCV API renderer does not preserve video audio. Use `video.py --with-audio` or an FFmpeg post-processing step.</sub>
+
+<p align="right"><a href="#top">⬆️ Back to top</a></p>
+
+<a id="quick-start"></a>
+
+## 🚀 Quick start
+
+<p>
+  <img alt="Step 1 Clone" src="https://img.shields.io/badge/1-Clone-2563EB?style=flat-square">
+  <img alt="Step 2 Install" src="https://img.shields.io/badge/2-Install-7C3AED?style=flat-square">
+  <img alt="Step 3 Models" src="https://img.shields.io/badge/3-Models-F59E0B?style=flat-square">
+  <img alt="Step 4 Verify" src="https://img.shields.io/badge/4-Verify-16A34A?style=flat-square">
+  <img alt="Step 5 Process" src="https://img.shields.io/badge/5-Process-DC2626?style=flat-square">
+</p>
+
+Clone the repository and enter the project:
 
 ```powershell
-# From the training toolkit folder
-cd C:\path\to\SafeText\traine
-
-# Check/install training dependencies
-python train_safety_objects.py check
-
-# Import a Roboflow/YOLOv8 dataset zip
-python train_safety_objects.py import-yolo datasets\cigarette.v3i.yolov8.zip
-
-# Validate the merged YOLO dataset
-python train_safety_objects.py validate
-
-# Train. Use auto so it falls back to CPU when CUDA is unavailable.
-python train_safety_objects.py train --base-model yolov8s.pt --imgsz 640 --epochs 100 --batch 16 --device auto
-
-# Export the best checkpoint to SafeVision ONNX files
-python train_safety_objects.py export --imgsz 640 --opset 15
+git clone https://github.com/im-syn/SafeVision.git
+Set-Location .\SafeVision
 ```
 
-The export writes:
+### <kbd>1</kbd> Install Python dependencies
 
-```text
-SafeVision/Models/safety_objects.onnx
-SafeVision/Models/safety_objects.labels.json
+Python 3.10 or newer is recommended. From the SafeVision directory:
+
+```powershell
+python -m venv .venv
+Set-ExecutionPolicy -Scope Process Bypass
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
 ```
 
-The first dataset imported for this model was a YOLOv8 cigarette dataset from Roboflow. The training script is designed to merge more YOLO datasets later, so alcohol and drug classes can be improved by importing additional datasets with matching or aliased class names. Keep `safety_labels.json` stable once a model is trained because ONNX output class indexes depend on label order.
-
-### 🔧 Advanced Installation Options
-
-#### GPU Acceleration (Recommended)
-```bash
-# For NVIDIA GPU support
-pip install onnxruntime-gpu
-
-# For Intel GPU support  
-pip install onnxruntime-openvino
-
-# For AMD GPU support
-pip install onnxruntime-directml
-```
-
-SafeVision now chooses ONNX Runtime providers conservatively. CUDA is preferred when available, CPU is kept as a fallback, and TensorRT is disabled by default because it requires extra CUDA/TensorRT shared libraries. To request a provider explicitly:
+On Linux or macOS, activate the environment with:
 
 ```bash
-python video.py -i input.mp4 --providers CUDAExecutionProvider,CPUExecutionProvider
-python main.py -i input.jpg --providers CUDAExecutionProvider,CPUExecutionProvider
+source .venv/bin/activate
 ```
 
-To opt into TensorRT, install the matching CUDA/TensorRT runtime libraries in the environment and set `SAFEVISION_ENABLE_TENSORRT=1`.
+FFmpeg is recommended for video audio preservation, transcoding, and broader
+codec support. Basic image analysis does not require it.
 
-#### FFmpeg Installation (Required for Video Processing)
+<details>
+<summary><strong>🐧 Linux / macOS installation commands</strong></summary>
+
 ```bash
-# Windows (using chocolatey)
-choco install ffmpeg
-
-# macOS (using homebrew)
-brew install ffmpeg
-
-# Ubuntu/Debian
-sudo apt update && sudo apt install ffmpeg
-
-# Manual installation
-python download_ffmpeg.py
+git clone https://github.com/im-syn/SafeVision.git
+cd SafeVision
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
 ```
 
-#### Virtual Environment (Recommended)
-```bash
-# Create virtual environment
-python -m venv safevision_env
+Screen Guard contains Windows-specific capture support; image, video, API,
+camera, and compatible live-stream features use cross-platform Python/OpenCV
+paths.
 
-# Activate (Windows)
-safevision_env\Scripts\activate
+</details>
 
-# Activate (Linux/macOS)
-source safevision_env/bin/activate
+<details>
+<summary><strong>⚡ Optional GPU provider setup</strong></summary>
 
-# Install dependencies
-pip install -r requirements.txt
+Install only one ONNX Runtime package that matches the machine and drivers.
+Examples:
+
+```powershell
+# NVIDIA CUDA build
+python -m pip uninstall -y onnxruntime
+python -m pip install onnxruntime-gpu
+
+# Return to the portable CPU build
+python -m pip uninstall -y onnxruntime-gpu
+python -m pip install "onnxruntime>=1.18,<2"
 ```
 
-### ✅ Installation Verification
+Then inspect what SafeVision can actually use:
 
-```bash
-# Test core functionality
-python main.py --help
+```powershell
+python safeVisionCLI.py providers
+```
 
-# Test GUI interface
-python safevision_gui.py
+</details>
 
-# Test API server
-python safevision_api.py
+### <kbd>2</kbd> Check the model files
 
-# Test live detection
-python live.py --help
+SafeVision uses these model files:
 
-# Test video processing
-python video.py --help
+- `Models/best.onnx` — NSFW/body-region detector. The image/video tools try to
+  download it automatically if it is missing.
+- `Models/onnx-communityage-gender-prediction-ONNX.onnx` — estimated age and
+  gender model. Download `onnx/model.onnx` from
+  [onnx-community/age-gender-prediction-ONNX](https://huggingface.co/onnx-community/age-gender-prediction-ONNX/tree/main/onnx)
+  and rename/place it at this exact path.
+- `Models/safety_objects.onnx` and `Models/safety_objects.labels.json` —
+  optional safety-object detector and metadata.
 
-# Test the all-in-one console CLI. Run without args for the interactive menu.
-python safeVisionCLI.py --help
+The age/gender model needs ONNX Runtime 1.18 or newer. The requirement is
+already enforced by `requirements.txt`.
+
+PowerShell download command:
+
+```powershell
+Invoke-WebRequest `
+  -Uri "https://huggingface.co/onnx-community/age-gender-prediction-ONNX/resolve/main/onnx/model.onnx" `
+  -OutFile ".\Models\onnx-communityage-gender-prediction-ONNX.onnx"
+```
+
+The age/gender file is intentionally ignored by Git because it is too large
+for an ordinary repository commit. Keep it in the local `Models/` folder, use
+Git LFS, or attach it to your own release/deployment artifact.
+
+### <kbd>3</kbd> Verify the installation
+
+```powershell
+python safeVisionCLI.py init
+python safeVisionCLI.py status
+python safeVisionCLI.py providers
+```
+
+A healthy status should show `Models/best.onnx`, the age/gender model, the
+active rule file, writable runtime directories, and at least the CPU execution
+provider.
+
+### <kbd>4</kbd> Process the first image
+
+```powershell
+python main.py `
+  -i ".\input\photo.jpg" `
+  -o ".\output\photo_checked.jpg" `
+  -b
+```
+
+This runs NSFW, age, and gender checks. `-b` applies regional blur to labels
+allowed by `BlurException.rule`. If the child-protection compound rule is
+matched, the protected output is fully obscured.
+
+### <kbd>5</kbd> Inspect the result
+
+```powershell
+Get-Item ".\output\photo_checked.jpg"
+Get-Content ".\Logs\photo_checked.jpg.analysis.json"
+```
+
+The image shows the requested rendering. The analysis JSON keeps the detector
+selection, demographic observations, qualified NSFW evidence, policy verdict,
+and exact output choices separate for auditing.
+
+> [!TIP]
+> Prefer `-b --no-boxes --no-save-boxes-copy` for a public-facing censored
+> image. Enable the `Prosses/` reviewer copy only when an authorized reviewer
+> needs the original detections.
+
+<p align="right"><a href="#top">⬆️ Back to top</a></p>
+
+<a id="detector-selection"></a>
+
+## 🧠 Detector selection
+
+Use `--detectors` with any comma-separated combination:
+
+- `nude` or `nsfw` — NSFW/body-region detector only;
+- `age` — estimated age and underage status only;
+- `gender` — model-reported gender only;
+- `demographics` — age and gender;
+- `protection` — NSFW, age, and gender;
+- `objects` — optional safety-object model only;
+- `both` — NSFW and safety objects; this legacy alias does not include age;
+- `all` — NSFW, safety objects, age, and gender;
+- `none` — disable all detectors where supported.
+
+If `--detectors` is omitted, SafeVision uses `nude,age,gender`.
+
+Examples:
+
+```powershell
+# Balanced default
+python main.py -i ".\input\photo.jpg"
+
+# Underage estimation only
+python main.py -i ".\input\photo.jpg" --detectors age
+
+# Age and gender, without NSFW detection
+python main.py -i ".\input\photo.jpg" --detectors demographics
+
+# Everything, including the optional safety-object model
+python main.py -i ".\input\photo.jpg" --detectors all
+```
+
+<details>
+<summary><strong>🧪 Detector aliases and when to use them</strong></summary>
+
+| Value | Expands to | Good for |
+|---|---|---|
+| `nude` / `nsfw` | NSFW/body detector | Existing NSFW-only integrations |
+| `age` | Age estimate only | Review pipelines that do not need gender output |
+| `gender` | Gender probability only | Model-output analysis; not identity inference |
+| `demographics` | Age + gender | Face-level metadata without NSFW inference |
+| `protection` | NSFW + age + gender | Balanced child-aware moderation |
+| `objects` | Safety-object model | Smoking, alcohol, and configured drug objects |
+| `both` | NSFW + objects | Legacy two-content-model workflow |
+| `all` | NSFW + objects + age + gender | Maximum available coverage |
+| `none` | No model inference | Fast forced-cover rendering |
+
+</details>
+
+<p align="right"><a href="#top">⬆️ Back to top</a></p>
+
+<a id="image-processing"></a>
+
+## 🖼️ Images with `main.py`
+
+There are three separate output controls:
+
+| Control | Result |
+|---|---|
+| `--boxes` / `--no-boxes` | Shows or hides boxes on the final image. Boxes do not censor anything. |
+| `-b` / `--blur` | Applies regional censoring according to the selected `.rule` file. |
+| `--force-full-cover` or an automatic policy/count trigger | Replaces the final image with a whole-image cover and centered reason. |
+
+The normal image command keeps boxes enabled for compatibility. The separate
+unredacted `Prosses/` boxes copy is disabled by default because it may expose
+the content that the safe output was meant to hide.
+
+### 🟩 Boxes only
+
+```powershell
+python main.py `
+  -i ".\input\photo.jpg" `
+  -o ".\output\photo_boxes.jpg" `
+  --boxes `
+  --no-save-boxes-copy
+```
+
+To save a second reviewer/debug copy in `Prosses/`, add
+`--save-boxes-copy`. Do not publish that file as a censored result.
+
+### 🟦 Regional blur with no boxes
+
+```powershell
+python main.py `
+  -i ".\input\photo.jpg" `
+  -o ".\output\photo_blurred.jpg" `
+  -b --no-boxes `
+  --detectors nude,age,gender
+```
+
+By default this also writes a clean regional-censor copy under `Blur/`. Use
+`--no-save-blur-copy` when only the requested `-o` file should be written.
+
+### ⬛ Regional solid masks
+
+`--color` affects detected regions, not the whole image. Colors use OpenCV BGR
+order:
+
+```powershell
+python main.py `
+  -i ".\input\photo.jpg" `
+  -o ".\output\photo_masked.jpg" `
+  -b --no-boxes --color `
+  --mask-color "0,0,0" `
+  --mask-shape ellipse
+```
+
+<a id="full-cover-reference"></a>
+
+### 🛑 Full-cover modes
+
+The whole-image cover has four modes:
+
+- `blur` — strong two-pass blur. It obscures detail but retains broad colors
+  and silhouettes.
+- `gray` — replaces every source pixel with opaque gray.
+- `black` — replaces every source pixel with black.
+- `color` — replaces every source pixel with `--full-cover-color`.
+
+Use a solid mode when the source must not be visible at all.
+
+| Mode | What remains visible? | Best use |
+|---|---|---|
+| `blur` | Broad color and silhouette may remain | Internal review or less destructive concealment |
+| `gray` | No source pixels | Neutral blocked preview |
+| `black` | No source pixels | Maximum visual suppression |
+| `color` | No source pixels | Branded/kiosk-safe replacement |
+
+> [!WARNING]
+> A strong blur is still derived from the source. When the underlying media
+> must never be visible, select `gray`, `black`, or `color`; these modes create
+> a new solid frame before optional text is drawn.
+
+Force a solid gray result for a test:
+
+```powershell
+python main.py `
+  -i ".\input\photo.jpg" `
+  -o ".\output\photo_covered.jpg" `
+  --force-full-cover `
+  --full-cover-mode gray `
+  --no-boxes
+```
+
+Force a custom cover with no text:
+
+```powershell
+python main.py `
+  -i ".\input\photo.jpg" `
+  --force-full-cover `
+  --full-cover-mode color `
+  --full-cover-color "110,64,28" `
+  --no-full-cover-text
+```
+
+`B,G,R` values are used by the command-line tools. The web APIs also accept
+`#RRGGBB`.
+
+`--full-cover-mode` selects how a cover looks; it does not trigger one by
+itself. A cover is triggered by one of these conditions:
+
+- `--force-full-cover`;
+- `-fbr N` after at least `N` censorable detections;
+- a blocking child-protection policy.
+
+Example: cover an image after one censorable NSFW detection and use the
+NSFW-only message:
+
+```powershell
+python main.py `
+  -i ".\input\photo.jpg" `
+  -b -fbr 1 `
+  --full-cover-mode black
+```
+
+The automatic centered messages are:
+
+- NSFW-only trigger: `Explicit content hidden`
+- qualified NSFW + estimated underage: `Possible illegal content - review required`
+- underage-only policy: `Estimated underage person - review required`
+- near-threshold age review: `Age review required`
+
+They are policy descriptions, not legal findings. Override the text for one
+run with `--full-cover-message "Your text"`, or edit the
+`FULL_COVER_MESSAGE_*` values in the selected rule file.
+
+<a id="rule-templates"></a>
+
+### 🧰 Select a ready-made rule file
+
+```powershell
+python main.py `
+  -i ".\input\photo.jpg" `
+  -b --no-boxes `
+  -e ".\rule_templates\12_compound_child_gray.rule"
+```
+
+There are 50 documented presets in
+[`rule_templates/README.md`](rule_templates/README.md).
+
+<p>
+  <img alt="Balanced rules" src="https://img.shields.io/badge/Balanced-5_presets-2563EB?style=flat-square">
+  <img alt="Child policy rules" src="https://img.shields.io/badge/Child_Policy-15%2B_presets-F59E0B?style=flat-square">
+  <img alt="Opaque cover rules" src="https://img.shields.io/badge/Opaque_Covers-Gray_%7C_Black_%7C_Color-111827?style=flat-square">
+  <img alt="Workflow rules" src="https://img.shields.io/badge/Workflows-CI_%7C_Live_%7C_Review-16A34A?style=flat-square">
+</p>
+
+Recommended starting points:
+
+| Template | Choose it when… |
+|---|---|
+| `01_balanced_default.rule` | You want the safest general starting point |
+| `12_compound_child_gray.rule` | Qualified NSFW + estimated-underage should produce an opaque gray result |
+| `21_explicit_regions_only.rule` | Only HIGH/CRITICAL explicit regions should be censored |
+| `33_family_photo_low_false_positive.rule` | Ordinary family/body context should be especially resistant to false positives |
+| `42_ci_compound_block.rule` | A CI job should fail on the balanced compound policy |
+| `48_solid_gray_no_text.rule` | The blocked result must reveal no source pixels and show no text |
+
+### 🎚️ Custom age and policy overrides
+
+```powershell
+python main.py `
+  -i ".\input\photo.jpg" `
+  --underage-age 18 `
+  --age-review-margin 3 `
+  --block-if-nsfw-and-child `
+  --no-block-if-child `
+  --child-nsfw-min-risk HIGH `
+  --child-nsfw-min-confidence 0.5
+```
+
+### 🤖 CI exit behavior
+
+```powershell
+# Exit 2 when the configured protection policy blocks the image
+python main.py -i ".\input\photo.jpg" --fail-on-policy
+
+# Exit 3 whenever any face is estimated below the age threshold
+python main.py -i ".\input\photo.jpg" --fail-on-underage
+
+# PowerShell: inspect the result
+$LASTEXITCODE
+```
+
+`--fail-on-underage` is intentionally stricter than the balanced protection
+policy. It can fail on a safe family photo because it tests the estimated age
+result without requiring qualified NSFW evidence.
+
+<p align="right"><a href="#top">⬆️ Back to top</a></p>
+
+<a id="video-processing"></a>
+
+## 🎬 Videos with `video.py`
+
+Video processing separates analysis from rendering. The detector pass builds
+frame statistics and evidence; the renderer then creates the requested
+regional output or an automatic whole-video cover.
+
+```mermaid
+sequenceDiagram
+    participant V as Input video
+    participant A as Analyzer
+    participant P as Policy
+    participant R as Renderer
+    participant F as FFmpeg
+    V->>A: Sample/read frames
+    A->>P: NSFW + demographic observations
+    P-->>R: Allow, review, or block reason
+    R->>R: Regional censor or full cover
+    R-->>F: Silent processed video
+    F-->>V: Optional original-audio merge
+```
+
+### 🎞️ Regional-censor output without boxes
+
+```powershell
+python video.py `
+  -i ".\input\video.mp4" `
+  -vo ".\video_output" `
+  --no-boxes --with-audio `
+  --detectors nude,age,gender `
+  --save-report `
+  --report-formats json,csv
+```
+
+The regular video path censors configured regions and writes
+`video_output/<name>_processed.mp4`. `--with-audio` uses FFmpeg to add the
+source audio when available.
+
+### 🔍 Reviewer copy with boxes
+
+```powershell
+python video.py `
+  -i ".\input\video.mp4" `
+  -vo ".\video_output" `
+  --boxes --blur --with-audio `
+  --detectors nude,age,gender
+```
+
+`--boxes` switches to the annotated-video workflow. Add `--blur` to censor
+matching regions in that annotated copy. A boxes-only video remains
+unredacted and should be restricted to reviewers.
+
+### 🚨 Automatic full-video cover
+
+The monitor rule `-r percentage/count` creates a second fully covered video
+when either threshold is met. `-fbr labels/frames` adds a per-frame density
+rule.
+
+```powershell
+python video.py `
+  -i ".\input\video.mp4" `
+  -vo ".\video_output" `
+  -e ".\rule_templates\12_compound_child_gray.rule" `
+  --detectors nude,age,gender `
+  -r 10/5 `
+  -fbr 2/10 `
+  --full-cover-mode gray `
+  --with-audio `
+  --save-report
+```
+
+This means: create the full-cover version when NSFW appears in at least 10%
+of frames, in at least 5 frames, when two censorable labels occur in at least
+10 frames, or when the selected child-protection policy blocks a frame.
+
+The generated filename ends in `_fully_covered.mp4`. The policy-specific text
+is centered on every frame. For a qualified NSFW + estimated-underage match,
+the default is `Possible illegal content - review required`.
+
+### ⬛ Force a complete black video
+
+```powershell
+python video.py `
+  -i ".\input\video.mp4" `
+  -vo ".\video_output" `
+  --detectors none `
+  --force-full-cover `
+  --full-cover-mode black `
+  --full-cover-message "Unavailable under this content policy" `
+  --with-audio
+```
+
+`gray`, `black`, and `color` write a solid frame, so the input image is not
+visible underneath. With `--detectors none`, forced-cover mode skips model
+loading and inference and writes only the covered output; it does not leave an
+uncensored processed-video copy. Use `--no-full-cover-text` for a plain solid
+video.
+
+### 📊 Analyze without rendering a video
+
+```powershell
+python video.py `
+  -i ".\input\video.mp4" `
+  --detectors nude,age,gender `
+  --analyze-only `
+  --save-report `
+  --report-formats json,csv
+```
+
+### 👥 Demographics only
+
+```powershell
+python video.py `
+  -i ".\input\video.mp4" `
+  --detectors demographics `
+  --analyze-only `
+  --save-report
+```
+
+### ✂️ Export editing markers
+
+```powershell
+python video.py `
+  -i ".\input\video.mp4" `
+  --analyze-only --save-report `
+  --export-markers both `
+  --marker-gap 1.0
+```
+
+Marker formats are `edl`, `fcpxml`, or `both`. Video demographic totals are
+sampled face observations across frames, not counts of unique people.
+
+Useful video switches:
+
+- `--enhanced-blur` — stronger regional blur;
+- `--color --mask-color "0,0,0"` — regional solid masks;
+- `--mask-shape ellipse` — elliptical regional masks;
+- `--save-boxes-copy` — in `-t frames` mode, keep separate unredacted box
+  images;
+- `--no-boxes` — explicitly disable the annotated-video path;
+- `--full-cover-text` / `--no-full-cover-text` — toggle the centered message;
+- `-e path.rule` — apply the same policy template used by `main.py`.
+
+<details>
+<summary><strong>📁 Video output naming guide</strong></summary>
+
+| Output | Meaning |
+|---|---|
+| `<name>_processed.mp4` | Regular region-censored result |
+| `<name>_processed_with_audio.mp4` | Regular result with source audio merged by FFmpeg |
+| `<name>_boxes.mp4` | Detection-box reviewer result |
+| `<name>_boxes_with_audio.mp4` | Reviewer result with source audio |
+| `<name>_fully_covered.mp4` | Whole-video blur or solid cover |
+| `<name>_fully_covered_with_audio.mp4` | Covered result with source audio |
+| `<name>_detections.json` / `.csv` | Frame/time detection report |
+| `<name>.edl` / `.fcpxml` | Editing markers for supported NLE workflows |
+
+Solid-cover outputs replace every video frame. Boxes-only outputs may expose
+the original content and belong in restricted review storage.
+
+</details>
+
+<p align="right"><a href="#top">⬆️ Back to top</a></p>
+
+<a id="command-cookbook"></a>
+
+## 🍳 Copy-and-run command cookbook
+
+These recipes are deliberately explicit about privacy-sensitive defaults.
+Replace the example media paths, then paste the command into PowerShell.
+
+<details open>
+<summary><strong>🖼️ Public-facing image: balanced censor, no boxes, no reviewer copy</strong></summary>
+
+```powershell
+python main.py `
+  -i ".\input\photo.jpg" `
+  -o ".\output\photo_safe.jpg" `
+  --detectors nude,age,gender `
+  -e ".\rule_templates\01_balanced_default.rule" `
+  -b --no-boxes `
+  --no-save-boxes-copy `
+  --save-blur-copy
+```
+
+</details>
+
+<details>
+<summary><strong>🛑 Child-aware image gate with opaque gray policy output</strong></summary>
+
+```powershell
+python main.py `
+  -i ".\input\upload.jpg" `
+  -o ".\output\upload_checked.jpg" `
+  --detectors protection `
+  -e ".\rule_templates\12_compound_child_gray.rule" `
+  -b --no-boxes `
+  --fail-on-policy
+
+if ($LASTEXITCODE -eq 2) {
+  Write-Host "Blocked by the configured protection policy"
+}
+```
+
+</details>
+
+<details>
+<summary><strong>🎥 Video moderation with audio, report, and editing markers</strong></summary>
+
+```powershell
+python video.py `
+  -i ".\input\clip.mp4" `
+  -vo ".\video_output" `
+  --detectors nude,age,gender `
+  -e ".\rule_templates\12_compound_child_gray.rule" `
+  --no-boxes --with-audio `
+  --save-report --report-formats json,csv `
+  --export-markers both --marker-gap 1.0
+```
+
+</details>
+
+<details>
+<summary><strong>⚡ Fast cover-only render without loading a model</strong></summary>
+
+```powershell
+# Image
+python main.py -i ".\input\photo.jpg" `
+  --detectors none --force-full-cover `
+  --full-cover-mode gray --no-boxes --no-full-cover-text
+
+# Video
+python video.py -i ".\input\clip.mp4" -vo ".\video_output" `
+  --detectors none --force-full-cover `
+  --full-cover-mode black --no-full-cover-text --with-audio
+```
+
+In forced video cover-only mode, SafeVision skips inference and does not write
+an uncensored `_processed.mp4` intermediate.
+
+</details>
+
+<details>
+<summary><strong>🧪 Age/gender research output without NSFW inference</strong></summary>
+
+```powershell
+python main.py `
+  -i ".\input\portrait.jpg" `
+  --detectors demographics `
+  --no-boxes --no-save-boxes-copy --no-save-blur-copy
+```
+
+Review the structured face results in `Logs/<output>.analysis.json`. Do not use
+the estimates as proof of age, identity, or self-described gender.
+
+</details>
+
+<details>
+<summary><strong>🌐 Start and exercise the local API</strong></summary>
+
+```powershell
+# Terminal 1: from the project root
+Copy-Item ".\SafeVision Web API\.env.example" ".\SafeVision Web API\.env"
+Set-Location ".\SafeVision Web API"
+.\start.ps1
+
+# Terminal 2: from the project root
+curl.exe -X POST `
+  -F "file=@.\input\photo.jpg" `
+  -F "checks=nude,age,gender" `
+  -F "blur=true" `
+  -F "boxes=false" `
+  -F "full_cover_mode=gray" `
+  http://127.0.0.1:5000/api/v1/detect
+```
+
+</details>
+
+<a id="all-in-one-console"></a>
+
+## 🧭 All-in-one console
+
+Open the interactive console:
+
+```powershell
 python safeVisionCLI.py
-
-# Test live streaming
-python live_streamer.py --help
 ```
 
-### SafeVision Console CLI
+Useful non-interactive commands:
 
-`safeVisionCLI.py` is the recommended control console for non-developers and power users. Run it with no arguments to open a looped row-based menu. It creates `settings/configs.json`, keeps rule profiles, scans media folders, launches GUI/API tools, and routes images/videos to the right processing script.
-
-```bash
-# Open the interactive looped menu
-python safeVisionCLI.py
-
-# First-time setup: create settings/configs.json, folders, and BlurException.rule
+```powershell
+# Initialize folders, settings, and the active rule file
 python safeVisionCLI.py init
 
-# Check scripts, folders, active rule profile, and ONNX providers
+# Inspect installation, model, folder, provider, and policy status
 python safeVisionCLI.py status
 
-# Scan the input folder for videos and images
-python safeVisionCLI.py scan input --recursive
+# Scan the input directory
+python safeVisionCLI.py scan ".\input" --recursive
 
-# Process a video with the active rule profile
-python safeVisionCLI.py process input/1.mp4 --providers CUDAExecutionProvider,CPUExecutionProvider
+# Automatically select main.py or video.py by file extension
+python safeVisionCLI.py process ".\input\photo.jpg" --blur
+python safeVisionCLI.py process ".\input\video.mp4" --boxes --blur --save-report
 
-# Use the new safety-object model only
-python safeVisionCLI.py process input/1.mp4 --detectors objects --boxes --blur
+# Select a preset and a solid policy cover through the wrapper
+python safeVisionCLI.py process ".\input\photo.jpg" --blur --no-boxes `
+  -e ".\rule_templates\12_compound_child_gray.rule" `
+  --full-cover-mode gray
 
-# Run both nudity/body and safety-object models together
-python safeVisionCLI.py process input/1.mp4 --detectors both --boxes --blur --object-threshold 0.25
+# Force a whole-video black cover
+python safeVisionCLI.py process ".\input\video.mp4" `
+  --detectors none --force-full-cover --full-cover-mode black --with-audio
 
-# Persist the default detector mode in settings/configs.json
-python safeVisionCLI.py settings set processing.detectors both
-python safeVisionCLI.py settings set processing.object_threshold 0.25
-
-# Launch the desktop GUI or API/web server when those files exist
+# Launch interfaces
 python safeVisionCLI.py launch gui
-python safeVisionCLI.py launch web
+python safeVisionCLI.py launch api
+python safeVisionCLI.py launch live
+python safeVisionCLI.py launch streamer
+```
 
-# Launch Screen Guard from saved settings/configs.json
+<p align="right"><a href="#top">⬆️ Back to top</a></p>
+
+<a id="desktop-gui"></a>
+
+## 🖥️ Desktop GUI
+
+```powershell
+python SafeVisionGUI.py
+```
+
+The GUI exposes image/video selection, output options, detector toggles,
+estimated-underage threshold, model paths, blur/mask settings, reports, and
+video options. The Basic tab also exposes the compound child-protection rule,
+underage-only and review-band blocking, qualified NSFW risk/confidence,
+final-box display, reviewer-copy and clean-blur-copy switches, and the complete
+full-cover mode/color/text controls. The selected `.rule` preset appears on
+the Advanced tab and is passed to both `main.py` and `video.py`.
+
+### 🗺️ GUI control map
+
+| Area | Main controls | Why it matters |
+|---|---|---|
+| File input | Browse, drag/drop, preview | Confirms the selected image/video before processing |
+| Detector Models | Content model, age toggle, gender toggle, underage threshold, review margin | Enables each check independently |
+| Child Protection Policy | Compound rule, any-child rule, review-band rule, NSFW risk/confidence | Controls when demographic observations affect the verdict |
+| Blur Options | Strength, solid regional mask, color, rectangle/ellipse | Controls detected-region censoring |
+| Output Privacy and Full Cover | Final boxes, reviewer copy, clean blur copy, force cover, mode/color/text | Prevents accidental unredacted output |
+| Video Options | Audio, codec, frame cleanup | Controls video packaging |
+| Analysis / Editor Markers | Analyze-only, reports, EDL/FCPXML | Supports review and editing workflows |
+| Advanced | Monitoring thresholds and `.rule` file | Selects automatic cover behavior and templates |
+
+> [!TIP]
+> For a public-facing output, turn **final boxes off**, keep **reviewer boxes
+> copy off**, enable regional censoring, and choose an opaque full-cover mode
+> for policy blocks. The reviewer copy is intentionally labeled as unredacted.
+
+<details>
+<summary><strong>⌨️ GUI-equivalent command example</strong></summary>
+
+```powershell
+python main.py `
+  -i ".\input\photo.jpg" `
+  --detectors nude,age,gender `
+  --underage-age 18 --age-review-margin 3 `
+  --block-if-nsfw-and-child --no-block-if-child `
+  --child-nsfw-min-risk HIGH --child-nsfw-min-confidence 0.5 `
+  -e ".\rule_templates\01_balanced_default.rule" `
+  -b --no-boxes --no-save-boxes-copy `
+  --full-cover-mode gray --full-cover-text
+```
+
+</details>
+
+<p align="right"><a href="#top">⬆️ Back to top</a></p>
+
+<a id="live-tools"></a>
+
+## 📡 Live tools
+
+Live tools reuse the same detector selection, rule file, risk gate, and
+demographic limitations. Choose the entry point based on where the pixels
+come from and where the protected output needs to go.
+
+### 📷 Live camera
+
+Age and gender checks are enabled by default:
+
+```powershell
+python live.py -c 0 --demographics --underage-age 18
+```
+
+Performance-oriented example:
+
+```powershell
+python live.py `
+  -c 0 `
+  --demographics `
+  --skip-frames 3 `
+  --no-boxes
+```
+
+Disable age and gender for NSFW-only camera processing:
+
+```powershell
+python live.py -c 0 --no-demographics
+```
+
+### 🖥️ Desktop Screen Guard
+
+List available monitors:
+
+```powershell
+python safeVisionScreenGuard.py --list-monitors
+```
+
+Protect monitor 1:
+
+```powershell
+python safeVisionScreenGuard.py `
+  --monitor 1 `
+  --mode both `
+  --detectors nsfw,age,gender `
+  --show-status `
+  --show-demographics `
+  --fps 4
+```
+
+To run the saved settings from `settings/configs.json`:
+
+```powershell
 python safeVisionCLI.py screen
-
-# Override saved screen settings for one run
-python safeVisionCLI.py screen -- --mode blur --show-boxes --show-labels --label-filter body
 ```
 
-Rule profiles are stored in `settings/configs.json`; activating a profile writes the working `BlurException.rule` file used by the processing scripts:
+Demographic boxes are informational. They do not censor a face by themselves.
+A matched child-protection policy can still activate full-monitor protection.
 
-```bash
-python safeVisionCLI.py rules list
-python safeVisionCLI.py rules use faces_allowed
-python safeVisionCLI.py rules set default FACE_MALE false
-python safeVisionCLI.py rules export default my_profile.rule
+### 🎙️ Live Streamer and OBS
+
+Camera example:
+
+```powershell
+python live_streamer.py `
+  -i camera -c 0 `
+  --detectors nsfw,age,gender `
+  --show-demographics `
+  --ai-fps 5
 ```
 
-### 🚨 Common Installation Issues
+Screen example with OBS scene switching:
 
-#### ONNX Runtime Issues
-```bash
-# If you get ONNX import errors:
-pip uninstall onnxruntime onnxruntime-gpu
-pip install onnxruntime
-
-# For GPU support:
-pip install onnxruntime-gpu
+```powershell
+python live_streamer.py `
+  -i screen -m 1 `
+  --detectors nsfw,age,gender `
+  --auto-scene-switch `
+  --obs-host localhost `
+  --obs-port 4455
 ```
 
-If a GPU provider cannot load inside Docker or another isolated environment, SafeVision logs the provider error and falls back to CPU instead of crashing. Check `nvidia-smi`, CUDA library availability, and the selected provider list printed at startup.
+OBS and virtual-camera features require their corresponding optional runtime
+and local application configuration.
 
-#### OpenCV Issues
-```bash
-# If OpenCV fails to import:
-pip uninstall opencv-python opencv-python-headless
-pip install opencv-python==4.8.1.78
-```
+<details>
+<summary><strong>⚡ Live-performance checklist</strong></summary>
 
-#### PyQt5 Issues
-```bash
-# If GUI fails to start:
-pip uninstall PyQt5
-pip install PyQt5==5.15.9
-```
+- Start with CPU and a low analysis FPS; increase only after measuring.
+- Reuse the default NSFW face boxes for age/gender instead of adding another
+  face detector.
+- Increase `--skip-frames` or reduce `--ai-fps` when the preview lags.
+- Keep the CPU execution provider as a fallback when a GPU provider is used.
+- Test overlay capture exclusion before monitoring the same screen that shows
+  SafeVision's overlay.
+- Use solid policy blocks where even a heavily blurred live frame is too much
+  visual disclosure.
 
----
+</details>
 
-## 📁 Project Structure
+<p align="right"><a href="#top">⬆️ Back to top</a></p>
 
-```
-SafeVision/
-├── 🎯 Core Applications
-│   ├── main.py                    # Image processing CLI
-│   ├── video.py                   # Video processing CLI
-│   ├── live.py                    # Live camera detection
-│   ├── live_streamer.py           # Live streaming integration
-│   ├── safeVisionScreenGuard.py   # Desktop screen protection overlay
-│   ├── safeVisionCLI.py           # Interactive console and settings manager
-│   ├── object_detector.py         # Optional safety-object ONNX detector
-│   └── safevision_utils.py        # Shared rules, providers, and IO helpers
-│
-├── 🎨 User Interfaces
-│   ├── safevision_gui.py          # Modern PyQt5 GUI
-│   └── safevision_api.py          # REST API server
-│
-├── 📁 Models & Configuration
-│   ├── Models/
-│   │   ├── best.onnx                       # Main nudity/body detection model
-│   │   ├── best_gender.onnx                # Gender/age model (optional)
-│   │   ├── safety_objects.onnx             # Smoking/alcohol/drug object detector
-│   │   └── safety_objects.labels.json      # Safety-object labels and thresholds
-│   ├── BlurException.rule         # Default blur rules, auto-created if missing
-│   ├── settings/configs.json      # Console settings and rule profiles
-│   └── custom_rules.rule          # Custom rule examples
-│
-├── 📁 Output Directories (Auto-created)
-│   ├── output/                    # Final processed content
-│   ├── Blur/                     # Blurred versions
-│   ├── Prosses/                  # Detection visualizations
-│   ├── video_output/             # Processed videos
-│   ├── Logs/                     # Application logs
-│   └── detection_screenshots/    # Detection captures
-│
-└── 📁 Configuration Files (Auto-generated)
-    ├── safevision_settings.json  # GUI settings
-    ├── detection_log.json        # Detection history
-    └── violation_log.json        # Violation tracking
-```
+<a id="child-protection"></a>
 
-### 📄 Key Files Explained
+## 🛡️ Child-protection rules
 
-#### 🎯 Core Processing Files
-- **`main.py`**: Single image processing with CLI interface
-- **`video.py`**: Batch video processing with advanced options
-- **`object_detector.py`**: Reusable YOLO ONNX detector for smoking/alcohol/drug objects
-- **`live.py`**: Real-time camera feed analysis
-- **`live_streamer.py`**: Live streaming integration with OBS support
-
-#### 🎨 User Interface Files
-- **`safevision_gui.py`**: Modern PyQt5 interface with advanced features
-- **`safevision_api.py`**: RESTful API server for integration
-
-#### ⚙️ Configuration Files
-- **`BlurException.rule`**: Rules defining what content to blur
-- **`*.json`**: Runtime settings and detection logs
-- **`safevision_gui.py`**: Modern PyQt5 interface with advanced features
-- **`safevision_api_server.py`**: RESTful API server for integration
-
-#### ⚙️ Configuration Files
-- **`config.py`**: Global settings and model configuration
-- **`BlurException.rule`**: Rules defining what content to blur
-- **`*.json`**: Runtime settings and detection logs
-
----
-
-## ⚙️ Configuration
-
-### 🔧 Global Configuration (config.py)
-
-The main configuration file controls detection behavior, performance settings, and output options:
-
-```python
-# Detection Settings
-DETECTION_THRESHOLD = 0.25      # Minimum confidence for detection
-ENHANCED_BLUR = False           # Enable stronger blur effects
-FULL_BLUR_STRENGTH = (99, 99, 75)  # Full-frame blur parameters
-
-# Performance Settings
-GPU_ACCELERATION = True         # Enable GPU processing
-MULTI_THREADING = True         # Use multiple CPU cores
-TARGET_FPS = 30                # Target processing FPS
-
-# Output Settings
-OUTPUT_VIDEO_SUFFIX = '_processed.mp4'
-AUTO_CLEANUP = False           # Auto-delete temporary files
-SAVE_DETECTION_LOGS = True     # Enable detection logging
-```
-
-### 📋 Blur Exception Rules
-
-Create custom rules in `BlurException.rule` or `custom_rules.rule`:
+Rules live in `BlurException.rule`. The balanced defaults are:
 
 ```ini
-# Content-specific rules (true = blur, false = ignore)
-FEMALE_GENITALIA_EXPOSED = true
-MALE_GENITALIA_EXPOSED = true
-FEMALE_BREAST_EXPOSED = true
-BUTTOCKS_EXPOSED = true
-ANUS_EXPOSED = true
-MALE_BREAST_EXPOSED = false
-BELLY_EXPOSED = false
-FEET_EXPOSED = false
 ARMPITS_EXPOSED = false
-FACE_FEMALE = false
-FACE_MALE = false
 
-# Covered content (usually safe)
-FEMALE_GENITALIA_COVERED = false
-FEMALE_BREAST_COVERED = false
-BUTTOCKS_COVERED = false
-ANUS_COVERED = false
-BELLY_COVERED = false
-FEET_COVERED = false
-ARMPITS_COVERED = false
+BLOCK_IF_NSFW_AND_CHILD = true
+BLOCK_IF_CHILD = false
+BLOCK_ON_AGE_REVIEW = false
+PROTECTION_NSFW_MIN_RISK = HIGH
+PROTECTION_NSFW_MIN_CONFIDENCE = 0.5
+UNDERAGE_AGE = 18
+AGE_REVIEW_MARGIN = 3
 
-# Safety object model labels
-cigarette = true
-vape = true
-alcohol_bottle = true
-wine_glass = true
-pill = true
-syringe = true
-cannabis_leaf = true
+FULL_COVER_MODE = blur
+FULL_COVER_COLOR = 96,96,96
+FULL_COVER_TEXT_COLOR = 255,255,255
+FULL_COVER_SHOW_TEXT = true
+FULL_COVER_BLUR_STRENGTH = 99
+FULL_COVER_MESSAGE_NSFW = Explicit content hidden
+FULL_COVER_MESSAGE_NSFW_AND_CHILD = Possible illegal content - review required
+FULL_COVER_MESSAGE_CHILD = Estimated underage person - review required
+FULL_COVER_MESSAGE_REVIEW = Age review required
 ```
 
-The console rule profiles now include both model families. `true` means a matching detection is blurred/masked; `false` means the detection can still be reported or boxed but the blur/mask is skipped.
+The default compound decision works like this:
 
-Detector settings are stored in `settings/configs.json`:
+1. A face must be estimated below `UNDERAGE_AGE`.
+2. The NSFW detector must also produce a `HIGH` or `CRITICAL` label.
+3. That explicit label must meet confidence `0.5`.
+
+### 🧮 Balanced policy examples
+
+| Observation | Estimated underage? | Qualified NSFW gate? | Default result |
+|---|:---:|:---:|---|
+| Face only | ✅ | ❌ | `ALLOW` or age-band `REVIEW`; no compound block |
+| Exposed armpit only | ✅ | ❌ (`LOW`, and region disabled) | `ALLOW`; no compound block |
+| Covered body label | ✅ | ❌ (`SAFE`) | `ALLOW`; no compound block |
+| High-risk explicit label below confidence | ✅ | ❌ | `ALLOW`/`REVIEW`; evidence remains visible in JSON |
+| High/critical explicit label at required confidence | ✅ | ✅ | `BLOCKED`; NSFW + estimated-underage reason |
+| Any estimated-underage face with `BLOCK_IF_CHILD=true` | ✅ | Not required | `BLOCKED`; underage-only reason |
+| Near-threshold estimate with `BLOCK_ON_AGE_REVIEW=true` | No | Not required | `BLOCKED`; review-band reason |
+
+Risk tiers used by this compound rule:
+
+- `LOW` — exposed armpits, belly, feet, or male chest;
+- `MODERATE` — exposed buttocks;
+- `HIGH` — exposed female breast or anus;
+- `CRITICAL` — exposed genitalia.
+
+Low-risk body-context observations do not turn an ordinary child/family photo
+into a full-image block. The `strict` profile restores armpit censoring and
+uses `MODERATE` with confidence `0.35`.
+
+Manage profiles from the CLI:
+
+```powershell
+python safeVisionCLI.py rules list
+python safeVisionCLI.py rules show default
+python safeVisionCLI.py rules use strict
+python safeVisionCLI.py rules use default
+
+python safeVisionCLI.py rules set default BLOCK_IF_NSFW_AND_CHILD true
+python safeVisionCLI.py rules set default PROTECTION_NSFW_MIN_RISK HIGH
+python safeVisionCLI.py rules set default PROTECTION_NSFW_MIN_CONFIDENCE 0.5
+python safeVisionCLI.py rules set default UNDERAGE_AGE 18
+```
+
+Use `BLOCK_IF_CHILD=true` only when the intended policy is to block every
+estimated child even when there is no explicit content.
+
+See [CHILD_PROTECTION.md](CHILD_PROTECTION.md) for the full model contract,
+policy details, performance notes, and accuracy limitations.
+
+> [!CAUTION]
+> The centered phrase `Possible illegal content - review required` is a
+> configurable moderation message, not a legal conclusion. SafeVision cannot
+> establish identity, actual age, consent, jurisdiction, or legality from an
+> image. Preserve an authorized human-review and escalation process.
+
+<p align="right"><a href="#top">⬆️ Back to top</a></p>
+
+<a id="web-api"></a>
+
+## 🌐 REST API
+
+The deployable service now lives in `SafeVision Web API/`. The root launcher
+is kept so existing integrations do not break.
+
+Install and configure it:
+
+```powershell
+python -m pip install -r ".\SafeVision Web API\requirements.txt"
+Copy-Item ".\SafeVision Web API\.env.example" ".\SafeVision Web API\.env"
+python safevision_api.py
+```
+
+The default address is `http://127.0.0.1:5000`. For a longer-running local or
+server process, use Waitress:
+
+```powershell
+Set-Location ".\SafeVision Web API"
+.\start.ps1
+```
+
+<p>
+  <img alt="Local default" src="https://img.shields.io/badge/Default-127.0.0.1%3A5000-2563EB?style=flat-square">
+  <img alt="Multipart" src="https://img.shields.io/badge/Input-Multipart_%7C_Base64_%7C_URL-7C3AED?style=flat-square">
+  <img alt="Media" src="https://img.shields.io/badge/Media-Image_%7C_Video-F59E0B?style=flat-square">
+  <img alt="Results" src="https://img.shields.io/badge/Results-JSON_%2B_Download-16A34A?style=flat-square">
+</p>
+
+Health check:
+
+```powershell
+curl.exe http://localhost:5000/api/v1/health
+```
+
+Upload an image with regional blur and no boxes:
+
+```powershell
+curl.exe -X POST `
+  -F "file=@.\input\photo.jpg" `
+  -F "checks=nude,age,gender" `
+  -F "blur=true" `
+  -F "boxes=false" `
+  http://localhost:5000/api/v1/detect
+```
+
+Force a solid gray full cover:
+
+```powershell
+curl.exe -X POST `
+  -F "file=@.\input\photo.jpg" `
+  -F "checks=nude,age,gender" `
+  -F "full_cover=true" `
+  -F "full_cover_mode=gray" `
+  -F "full_cover_show_text=true" `
+  http://localhost:5000/api/v1/detect
+```
+
+The same render parameters work for uploaded videos. A blocking
+child-protection verdict automatically creates a complete covered result by
+default, even when the caller asked only for regional blur. Set
+`protection_forces_full_cover=false` only when an integration intentionally
+wants a JSON-only/block-without-cover workflow.
+
+Age and gender only:
+
+```powershell
+curl.exe -X POST `
+  -F "file=@.\input\photo.jpg" `
+  http://localhost:5000/api/v1/detect/demographics
+```
+
+Analyze a remote image or video URL:
+
+```powershell
+curl.exe "http://localhost:5000/api/v1/detect/url?url=https://example.com/photo.jpg&checks=nude,age,gender"
+```
+
+Available API routes:
+
+- `GET /api/v1/health`
+- `POST /api/v1/detect`
+- `POST /api/v1/detect/base64`
+- `GET /api/v1/detect/url`
+- `GET /api/v1/detect/media`
+- `POST /api/v1/detect/demographics`
+- `POST /api/v1/detect/demographics/base64`
+- `GET /api/v1/detect/demographics/url`
+- `GET /api/v1/labels`
+- `GET /api/v1/stats`
+- `GET /api/v1/results/<filename>`
+
+### 🔌 Endpoint map
+
+| Route | Method | Purpose |
+|---|---|---|
+| `/api/v1/health` | `GET` | Runtime, model, and service health |
+| `/api/v1/detect` | `POST` | Multipart image or video analysis/rendering |
+| `/api/v1/detect/base64` | `POST` | Base64 image analysis/rendering |
+| `/api/v1/detect/url` | `GET` | Download and inspect an image/video URL |
+| `/api/v1/detect/demographics` | `POST` | Dedicated age + gender multipart route |
+| `/api/v1/detect/demographics/base64` | `POST` | Dedicated age + gender base64 route |
+| `/api/v1/detect/demographics/url` | `GET` | Dedicated age + gender URL route |
+| `/api/v1/labels` | `GET` | Available NSFW labels and metadata |
+| `/api/v1/stats` | `GET` | Runtime usage statistics |
+| `/api/v1/results/<filename>` | `GET` | Download a generated result |
+
+Protection and rendering responses include:
 
 ```json
 {
-  "processing": {
-    "detectors": "nude",
-    "object_model": "Models/safety_objects.onnx",
-    "object_labels": "Models/safety_objects.labels.json",
-    "object_threshold": 0.25
+  "checks": ["nude", "age", "gender"],
+  "demographics": {
+    "underage_detected": true,
+    "faces_detected": 2
+  },
+  "protection_policy": {
+    "verdict": "BLOCKED",
+    "blocked": true,
+    "reasons": ["NSFW_CONTENT_WITH_ESTIMATED_UNDERAGE_PERSON"],
+    "nsfw_gate": {
+      "detected": true,
+      "minimum_risk": "HIGH",
+      "minimum_confidence": 0.5,
+      "evidence": [
+        {"label": "FEMALE_BREAST_EXPOSED", "score": 0.91, "risk_level": "HIGH"}
+      ]
+    }
+  },
+  "output": {
+    "rendered": true,
+    "url": "/api/v1/results/REQUEST_ID_photo.jpg",
+    "full_cover_applied": true,
+    "full_cover_mode": "gray",
+    "full_cover_reason": "nsfw_and_child",
+    "full_cover_message": "Possible illegal content - review required"
   }
 }
 ```
 
-Valid detector modes are `nude`, `objects`, and `both`.
+The `nsfw_gate.evidence` list explains which explicit detections caused a
+compound child-protection decision.
 
----
+<details>
+<summary><strong>🧾 Important response fields</strong></summary>
 
-## 🚬 Safety Object Model (Smoking, Alcohol, Drugs)
+| Field | Meaning |
+|---|---|
+| `checks` | Effective detector set used for this request |
+| `detections` | Filtered model observations and boxes |
+| `demographics.faces` | Face-level estimated age and gender output |
+| `protection_policy.verdict` | `ALLOW`, `REVIEW`, or `BLOCKED` |
+| `protection_policy.reasons` | Machine-readable policy reason codes |
+| `protection_policy.nsfw_gate.evidence` | Exact explicit detections that qualified for the compound rule |
+| `policy_settings` | Effective thresholds and booleans after request overrides |
+| `output.url` | Download path for a rendered result |
+| `output.full_cover_mode` | Applied whole-media mode, if any |
+| `output.full_cover_message` | Center message written onto the result, if enabled |
 
-SafeVision now supports a second optional ONNX model: `Models/safety_objects.onnx`.
+</details>
 
-This model is a YOLO-style object detector trained for visible safety-related objects:
+The API's `.env` selects model paths, rule file, runtime folders, default
+checks, limits, and full-cover defaults. See
+[`SafeVision Web API/README.md`](SafeVision%20Web%20API/README.md) for every
+parameter, result downloads, Windows setup, and a website/reverse-proxy
+deployment walkthrough.
 
-| Category | Labels |
-|----------|--------|
-| Smoking | `cigarette`, `cigar`, `vape`, `smoking_pipe`, `joint` |
-| Alcohol | `alcohol_bottle`, `beer_bottle`, `wine_glass`, `beer_glass`, `cocktail_glass` |
-| Drugs | `pill`, `pill_bottle`, `syringe`, `cannabis_leaf`, `drug_bag` |
+<p align="right"><a href="#top">⬆️ Back to top</a></p>
 
-The model metadata lives in `Models/safety_objects.labels.json`. It defines label order, category mapping, aliases, and default category thresholds. Do not edit label order unless you also retrain/export the ONNX model.
+<a id="configuration"></a>
 
-### Detector Modes
+## ⚙️ Configuration and operations
 
-The image, video, CLI, and GUI paths can choose which model family to run:
+SafeVision accepts settings at several layers. The most specific layer wins:
 
-| Mode | Meaning |
-|------|---------|
-| `nude` | Run only the original nudity/body model |
-| `objects` | Run only `safety_objects.onnx` |
-| `both` | Run both models and merge detections |
-
-Examples:
-
-```bash
-# Image: object model only
-python main.py -i input.jpg -b --detectors objects --object-threshold 0.25
-
-# Image: both models
-python main.py -i input.jpg -b --detectors both
-
-# Video: both models with boxes and blur
-python video.py -i input.mp4 -b --blur --detectors both --object-threshold 0.25
-
-# CLI: persist both models as the default
-python safeVisionCLI.py settings set processing.detectors both
+```mermaid
+flowchart LR
+    A[Built-in safe defaults] --> B[settings/configs.json]
+    B --> C[Selected .rule template]
+    C --> D[Environment / API config]
+    D --> E[CLI or per-request override]
 ```
 
-When a safety-object label is detected, SafeVision treats it as censorable. It can be blurred, solid-color masked, boxed, logged, exported to JSON/CSV reports, and exported to EDL/FCPXML marker files.
+### 💾 Persistent settings
 
-### Training Summary
-
-The current model was trained as a separate YOLOv8 object detector:
-
-1. A YOLOv8-format cigarette dataset was imported from Roboflow.
-2. The training tool normalized dataset structure into `datasets/safety_objects`.
-3. Labels were mapped to the canonical `safety_labels.json` order.
-4. Training used Ultralytics YOLO with `imgsz 640`.
-5. The best checkpoint was exported to ONNX opset 15.
-6. The exported files were copied into `SafeVision/Models/`.
-
-Recommended command flow:
+The main configuration file is `settings/configs.json`. Prefer the CLI for
+simple changes:
 
 ```powershell
-cd C:\path\to\SafeText\traine
-python train_safety_objects.py check
-python train_safety_objects.py import-yolo C:\path\to\dataset.yolov8.zip
-python train_safety_objects.py validate
-python train_safety_objects.py train --base-model yolov8s.pt --imgsz 640 --epochs 100 --batch 16 --device auto
-python train_safety_objects.py export --imgsz 640 --opset 15
+python safeVisionCLI.py settings show
+python safeVisionCLI.py settings get processing.detectors
+python safeVisionCLI.py settings set processing.detectors nude,age,gender
+python safeVisionCLI.py settings set processing.underage_age 18
+python safeVisionCLI.py settings set processing.rule_file rule_templates/12_compound_child_gray.rule
+python safeVisionCLI.py settings set processing.full_cover_mode gray
+python safeVisionCLI.py settings set processing.full_cover_text true
+python safeVisionCLI.py settings set processing.save_boxes_copy false
+python safeVisionCLI.py settings set screen_guard.mode blur
+python safeVisionCLI.py settings set screen_guard.show_status true
 ```
 
-If PyTorch reports `torch.cuda.is_available(): False`, use `--device auto` or `--device cpu`. Use `--device 0 --strict-device` only when a real CUDA GPU is visible to PyTorch.
+Command-line arguments override saved settings for that run. Rule profiles are
+stored in `settings/configs.json`; the active profile is written to
+`BlurException.rule`.
 
-For better coverage, import more datasets for alcohol/drug classes before retraining. The first model is strongest on cigarette-like objects because that was the first dataset added.
+<details>
+<summary><strong>🧱 Configuration layer reference</strong></summary>
 
----
+| Layer | File / mechanism | Use it for |
+|---|---|---|
+| Persistent console | `settings/configs.json` | Default paths, detectors, rendering, live settings, named profiles |
+| Active media rules | `BlurException.rule` | Label censor switches, child policy, thresholds, cover mode and messages |
+| Ready-made presets | `rule_templates/*.rule` | Switching complete policies without manual editing |
+| Desktop GUI | `safevision_settings.json` | Local GUI choices; ignored by Git |
+| Local Web API | `SafeVision Web API/.env` | Host, port, paths, limits, default checks and cover settings |
+| Hosted `vision2` | Admin panel/config store | Live service defaults and allowed request overrides |
+| One run | CLI arguments | Temporary local override |
+| One API call | Form/query/JSON fields | Temporary request override, when allowed |
 
-## 🔍 Detection Models & Labels
+</details>
 
-| File | Purpose | Labels |
-|------|---------|--------|
-| `Models/best.onnx` | Main nudity/body detector | 18 body/coverage labels |
-| `Models/best_gender.onnx` | Optional gender/age helper for live tools | Gender/age outputs |
-| `Models/safety_objects.onnx` | Optional smoking/alcohol/drug object detector | 15 object labels |
-| `Models/safety_objects.labels.json` | Metadata for the safety-object detector | Label order, categories, aliases, thresholds |
+<a id="output-privacy"></a>
 
-Detection outputs now include source metadata when reports are enabled:
+### 📁 Outputs and privacy boundaries
 
-```json
-{
-  "class": "cigarette",
-  "category": "smoking",
-  "source": "objects",
-  "model": "safety_objects",
-  "censor": true
-}
+SafeVision uses these folders:
+
+- `input/` — optional source-media folder;
+- `output/` — final image requested with `-o` or the default output name;
+- `Blur/` — optional clean regional-censor image copy; disable with
+  `--no-save-blur-copy`;
+- `Prosses/` — optional, unredacted detection-box reviewer copy; enable with
+  `--save-boxes-copy`;
+- `Logs/` — image logs and structured analysis JSON;
+- `video_output/` — video reports, frames, markers, and generated video files;
+- `SafeVision Web API/runtime/` — local API uploads, rendered results, and
+  temporary URL downloads.
+
+An image run writes both a readable `.log` and
+`Logs/<output-name>.analysis.json`. The analysis JSON records which checks ran,
+the policy reason, whether full cover was applied, its mode and message, and
+which optional copies were saved. Video reports can be JSON and CSV.
+
+When a full cover is active, the final output and the `Blur/` safe copy are
+covered. A deliberately enabled `Prosses/` box copy remains a reviewer artifact
+and may show the original media; keep it disabled on public or unattended
+systems.
+
+### 🔐 Which output should I keep?
+
+| Output type | Contains source pixels? | Contains boxes? | Intended audience |
+|---|:---:|:---:|---|
+| Final image with `--no-boxes -b` | Only outside censored regions | ❌ | Normal safe-output workflow |
+| `Blur/` clean copy | Only outside censored regions | ❌ | Normal safe-output workflow |
+| `Prosses/` reviewer copy | ✅ | ✅ | Authorized reviewer/debug only |
+| Opaque gray/black/color cover | ❌ | Optional centered text only | Public blocked preview |
+| Strong full blur | Derived from source | Optional centered text only | Internal/low-disclosure preview |
+| Boxes-only video | ✅ | ✅ | Authorized reviewer/debug only |
+| Fully covered video | ❌ for solid modes | ❌ | Blocked-media replacement |
+| Analysis JSON/log | No image pixels; contains sensitive findings/paths | Coordinates/data | Restricted logs and auditing |
+
+> [!WARNING]
+> `--save-boxes-copy` is intentionally off by default. Turning it on creates
+> an unredacted reviewer artifact even when the final image is fully covered.
+
+### ⚡ Performance and ONNX providers
+
+List the providers selected on the current machine:
+
+```powershell
+python safeVisionCLI.py providers
 ```
 
-This lets JSON/CSV reports and editor marker exports identify which model produced each detection.
+Force CPU execution:
 
-### 🎛️ Application-Specific Settings
-
-#### GUI Settings (`safevision_settings.json`)
-```json
-{
-  "window_geometry": {
-    "width": 1200,
-    "height": 800,
-    "x": 100,
-    "y": 100
-  },
-  "theme": "dark",
-  "last_directory": "",
-  "auto_preview": true,
-  "default_codec": "mp4v"
-}
+```powershell
+python main.py `
+  -i ".\input\photo.jpg" `
+  --providers CPUExecutionProvider
 ```
 
-#### API Server Configuration
-```python
-API_CONFIG = {
-    'HOST': '0.0.0.0',
-    'PORT': 5000,
-    'MAX_CONTENT_LENGTH': 50 * 1024 * 1024,  # 50MB
-    'DEFAULT_THRESHOLD': 0.25,
-    'ALLOWED_EXTENSIONS': {'png', 'jpg', 'jpeg', 'mp4', 'avi', 'mov'}
-}
+If the appropriate ONNX Runtime package and drivers are installed, providers
+can be ordered with a comma-separated list:
+
+```powershell
+python video.py `
+  -i ".\input\video.mp4" `
+  --providers CUDAExecutionProvider,CPUExecutionProvider `
+  --analyze-only
 ```
 
----
+SafeVision reuses ONNX sessions, batches multiple faces, and reuses NSFW face
+boxes for age/gender inference to avoid a second face-detection pass.
 
-## 🖼️ Image Processing (main.py)
+<details>
+<summary><strong>🚀 Practical performance tuning</strong></summary>
 
-**Purpose**: Process single images with nudity/body and optional safety-object detection, then apply censoring/blurring effects.
+1. Run `python safeVisionCLI.py providers` and confirm the provider order.
+2. Start with `CPUExecutionProvider`; add a GPU provider only after its runtime
+   and drivers are installed.
+3. Keep CPU as a fallback after a requested accelerator.
+4. Reuse `nude,age,gender` so age/gender can consume the NSFW model's face
+   boxes instead of running fallback face detection.
+5. For video review, use `--analyze-only` before rendering multiple variants.
+6. For live tools, reduce AI FPS or increase frame skipping before reducing
+   the censoring policy.
+7. Use `--detectors none --force-full-cover` for a fast cover-only transform.
+8. Use solid full covers when privacy is more important than retaining visual
+   context; they are also cheaper than repeated strong blur passes.
 
-**Key Features**:
-- Single image analysis with selectable ONNX model inference
-- Optional smoking/alcohol/drug object detection with `safety_objects.onnx`
-- Customizable blur strength and masking options
-- Bounding box visualization with confidence scores
-- Multiple output formats (original, blurred, detection overlay)
-- Custom exception rules for selective censoring
+</details>
 
----
+<p align="right"><a href="#top">⬆️ Back to top</a></p>
 
-## �️ Image Processing (main.py)
+<a id="troubleshooting"></a>
 
-**Purpose**: Process single images with selected SafeVision detector models and apply censoring/blurring effects.
+## 🧯 Troubleshooting
 
-**Key Features**:
-- Single image analysis with ONNX model inference
-- Customizable blur strength and masking options
-- Bounding box visualization with confidence scores
-- Multiple output formats (original, blurred, detection overlay)
-- Custom exception rules for selective censoring
+<details open>
+<summary><strong>📦 Age/gender model is missing</strong></summary>
 
-### 🚀 Basic Usage
+Confirm the exact file path and spelling:
 
-```bash
-# Simple detection with default settings
-python main.py -i path/to/image.jpg
-
-# Detection with custom output path
-python main.py -i input.jpg -o custom_output.jpg
-
-# Apply blur to detected regions
-python main.py -i input.jpg -b
-
-# Run only the safety-object model
-python main.py -i input.jpg -b --detectors objects
-
-# Run both the nudity/body model and safety-object model
-python main.py -i input.jpg -b --detectors both --object-threshold 0.25
-
-# Use custom exception rules
-python main.py -i input.jpg -b -e custom_rules.rule
-
-# Trigger full blur when 2+ exposed regions detected
-python main.py -i input.jpg -b -fbr 2
+```text
+Models/onnx-communityage-gender-prediction-ONNX.onnx
 ```
 
-### 📋 Command Line Arguments
+Then run the installation report:
 
-| Argument | Long Form | Type | Description | Default |
-|----------|-----------|------|-------------|---------|
-| `-i` | `--input` | `str` | **Required.** Input image path | None |
-| `-o` | `--output` | `str` | Output image path | Auto-generated |
-| `-b` | `--blur` | `flag` | Apply blur to detected regions | False |
-| `-e` | `--exception` | `str` | Path to blur exception rules file | `BlurException.rule` |
-| `-fbr` | `--full_blur_rule` | `int` | Exposed regions count to trigger full blur | 0 (disabled) |
-| N/A | `--detectors` | `str` | Detector mode: `nude`, `objects`, or `both` | `nude` |
-| N/A | `--object-model` | `str` | Path to safety-object ONNX model | `Models/safety_objects.onnx` |
-| N/A | `--object-labels` | `str` | Path to safety-object labels JSON | `Models/safety_objects.labels.json` |
-| N/A | `--object-threshold` | `float` | Minimum confidence for safety-object detections | `0.25` |
-
-### 📁 Output Structure
-
-When processing `example.jpg`, the following files are created:
-
-```
-output/
-├── example.jpg              # Final processed image (boxes + selective blur)
-Blur/
-├── example.jpg              # Fully blurred version
-Prosses/
-├── example.jpg              # Detection boxes only (no blur)
-Logs/
-├── detection_YYYYMMDD.log   # Processing log with timestamps
+```powershell
+python safeVisionCLI.py status
 ```
 
-### 🔍 Detection Categories
+If the file is absent, download it with the command in
+[Check the model files](#quick-start). The age/gender model is intentionally
+not committed to ordinary Git history because of its size.
 
-The model detects 18 different content categories with confidence scores:
+If this deployment should perform **NSFW detection only**, explicitly disable
+the demographic checks instead of leaving a broken path configured:
 
-**Safe Content:**
-- `FACE_FEMALE`, `FACE_MALE` - Facial detection
-- `*_COVERED` variants - Clothed body parts
-
-**Risk Categories:**
-- **Low Risk**: `MALE_BREAST_EXPOSED`, `BELLY_EXPOSED`, `FEET_EXPOSED`, `ARMPITS_EXPOSED`
-- **Moderate Risk**: `BUTTOCKS_EXPOSED`  
-- **High Risk**: `FEMALE_BREAST_EXPOSED`, `ANUS_EXPOSED`
-- **Critical Risk**: `FEMALE_GENITALIA_EXPOSED`, `MALE_GENITALIA_EXPOSED`
-
-**Safety Object Categories (optional `--detectors objects|both`):**
-- **Smoking**: `cigarette`, `cigar`, `vape`, `smoking_pipe`, `joint`
-- **Alcohol**: `alcohol_bottle`, `beer_bottle`, `wine_glass`, `beer_glass`, `cocktail_glass`
-- **Drugs**: `pill`, `pill_bottle`, `syringe`, `cannabis_leaf`, `drug_bag`
-
----
-
-## 🎥 Video Processing (video.py)
-
-**Purpose**: Process video files with frame-by-frame nudity/body and optional safety-object detection, then apply censoring effects.
-
-**Key Features**:
-- Frame-by-frame analysis with selectable ONNX model inference
-- Optional smoking/alcohol/drug object detection with `safety_objects.onnx`
-- Audio preservation during processing
-- Multiple output formats (original, blurred, with detection boxes)
-- Batch processing with progress tracking
-- Custom codec support and FFmpeg integration
-- Advanced blur rules and full-frame triggers
-
-### 🚀 Basic Usage
-
-```bash
-# Simple video detection
-python video.py -i path/to/video.mp4 -t video
-
-# Blur detected areas with audio preservation
-python video.py -i input.mp4 -b --blur -a
-
-# Safety-object model only
-python video.py -i input.mp4 -b --blur --detectors objects
-
-# Both models with object threshold control
-python video.py -i input.mp4 -b --blur --detectors both --object-threshold 0.25
-
-# Custom output location
-python video.py -i input.mp4 -o output.mp4 -t video
-
-# Enhanced blur with custom rules
-python video.py -i input.mp4 -b --blur --enhanced-blur -fbr 2/10
-
-# Solid color masking with ellipse regions instead of rectangular blur
-python video.py -i input.mp4 -b --color --mask-color 255,0,0 --mask-shape ellipse
+```powershell
+python main.py -i ".\input\photo.jpg" -b --detectors nude
+python video.py -i ".\input\video.mp4" -b --blur --detectors nude
 ```
 
-### 📋 Command Line Arguments
+</details>
 
-| Argument | Long Form | Type | Description | Default |
-|----------|-----------|------|-------------|---------|
-| `-i` | `--input` | `str` | **Required.** Input video path | None |
-| `-o` | `--output` | `str` | Output video path | Auto-generated |
-| `-t` | `--task` | `str` | Task type: `video` or `frames` | `video` |
-| `-vo` | `--video_output` | `str` | Output folder | `video_output` |
-| `-r` | `--rule` | `str` | Rule format: `percentage/count` | `50.0/5` |
-| `-b` | `--boxes` | `flag` | Draw detection boxes | False |
-| `--blur` | N/A | `flag` | Blur detected areas (requires `-b`) | False |
-| `-a` | `--with-audio` | `flag` | Include original audio | False |
-| `-c` | `--codec` | `str` | Video codec (`mp4v`, `xvid`, etc.) | `mp4v` |
-| `--ffmpeg-path` | N/A | `str` | Custom FFmpeg path | Auto-detect |
-| `-df` | `--delete-frames` | `flag` | Auto-delete temporary frames | False |
-| `--enhanced-blur` | N/A | `flag` | Stronger censorship blur | False |
-| `--color` | N/A | `flag` | Use solid color masking | False |
-| `--mask-color` | N/A | `str` | Color for masking (BGR: `0,0,255`) | `0,0,0` |
-| `--mask-shape` | N/A | `str` | Regional mask shape: `rectangle` or `ellipse` | `rectangle` |
-| `-fbr` | `--full-blur-rule` | `str` | Full blur trigger: `labels/frames` | `0` |
-| N/A | `--providers` | `str` | Comma-separated ONNX Runtime providers | Auto-select |
-| N/A | `--detectors` | `str` | Detector mode: `nude`, `objects`, or `both` | `nude` |
-| N/A | `--object-model` | `str` | Path to safety-object ONNX model | `Models/safety_objects.onnx` |
-| N/A | `--object-labels` | `str` | Path to safety-object labels JSON | `Models/safety_objects.labels.json` |
-| N/A | `--object-threshold` | `float` | Minimum confidence for safety-object detections | `0.25` |
+<details>
+<summary><strong>🧩 ONNX Runtime compatibility error</strong></summary>
 
-### 🎛️ Processing Modes
+The age/gender model requires ONNX Runtime 1.18 or newer:
 
-#### Frame Processing Mode (`-t frames`)
-```bash
-# Extract and process individual frames
-python video.py -i video.mp4 -t frames
-```
-- Extracts video frames for individual analysis
-- Useful for detailed frame inspection
-- Outputs processed frames to `output_frames/`
-
-#### Video Processing Mode (`-t video`)
-```bash
-# Process entire video with censoring
-python video.py -i video.mp4 -t video -b --blur -a
-```
-- Processes entire video with applied censoring
-- Generates final output video file
-- Preserves audio when `-a` flag is used
-
-### 🔧 Advanced Features
-
-#### Blur Rules (`-r percentage/count`)
-```bash
-# Trigger full blur when 30% of frames or 10 frames have detections
-python video.py -i video.mp4 -r 30.0/10 -b --blur
+```powershell
+python -m pip install --upgrade "onnxruntime>=1.18,<2"
+python safeVisionCLI.py providers
 ```
 
-#### Full Blur Rules (`-fbr labels/frames`)
-```bash
-# Full blur when 2+ exposed labels detected for 5+ consecutive frames
-python video.py -i video.mp4 -fbr 2/5 -b --blur
-```
+Use `onnxruntime-gpu` only when the matching GPU drivers and provider runtime
+are installed. Do not keep the CPU and GPU ONNX Runtime wheels installed in the
+same environment.
 
-#### Custom Codecs
-```bash
-# Use specific codec for output
-python video.py -i input.mp4 -c xvid -b --blur -a
-```
+</details>
 
-### 📁 Output Structure
+<details>
+<summary><strong>👨‍👩‍👧 A safe family image was blocked or fully covered</strong></summary>
 
-When processing `example.mp4`, the following files are created:
+Inspect `protection_policy.nsfw_gate` and `protection_policy.reasons` in the
+analysis JSON. The balanced policy requires qualified, sufficiently confident
+NSFW evidence **and** a child observation; a child face alone is not a reason
+to block an ordinary family image.
 
-```
-video_output/
-├── example_processed.mp4         # Final processed video
-├── example_with_boxes.mp4        # Video with detection boxes
-├── example_with_audio.mp4        # Audio-preserved version
-└── example_with_boxes_audio.mp4  # Boxes + audio version
-
-output_frames/                    # If using frames mode
-├── frame_001.jpg                 # Individual processed frames
-├── frame_002.jpg
-└── ...
-
-Logs/
-├── video_processing_YYYYMMDD.log # Processing log
-└── detection_report.json         # Detailed detection data
-```
-
-### ⚙️ Configuration Options
-
-The video processor uses several configuration parameters from `CONFIG` dictionary:
-
-```python
-CONFIG = {
-    'BLUR_STRENGTH_NORMAL': (23, 23, 30),     # Normal blur parameters
-    'BLUR_STRENGTH_HIGH': (31, 31, 50),       # High blur parameters
-    'FULL_BLUR_STRENGTH': (99, 99, 75),       # Full frame blur
-    'ENHANCED_BLUR': False,                    # Enhanced blur mode
-    'DETECTION_THRESHOLD': 0.2,               # Detection confidence
-    'MONITOR_THRESHOLD_PERCENT': 10.0,        # Monitoring threshold %
-    'MONITOR_THRESHOLD_COUNT': 5,             # Monitoring frame count
-    'FULL_BLUR_LABELS': 2,                    # Labels to trigger full blur
-    'OUTPUT_VIDEO_SUFFIX': '_processed.mp4'   # Output file suffix
-}
-```
-
-### 🚨 Common Issues & Solutions
-
-#### FFmpeg Not Found
-```bash
-# Install FFmpeg or specify path
-python video.py -i video.mp4 --ffmpeg-path /path/to/ffmpeg
-```
-
-#### Large Video Files
-```bash
-# Video mode streams directly to the output video and avoids frame JPGs
-python video.py -i large_video.mp4 -df --enhanced-blur
-```
-
-`-df` no longer waits until the end to clean up frame JPGs in video mode; intermediate frame images are not written in the first place. Use `-t frames` when you intentionally want per-frame image output.
-
-#### Windows Unicode Paths
-
-Image reads and writes use Unicode-safe OpenCV helpers, and video preview/processing has a Windows fallback for paths containing non-ASCII characters or special symbols. If OpenCV cannot open the original video path directly, SafeVision copies the input to a temporary ASCII path for the capture session.
-
-#### Audio Sync Issues
-```bash
-# Use specific codec for better compatibility
-python video.py -i video.mp4 -c mp4v -a
-```
-
----
-
-##  Blur Exception Rules
-
-Create a file named `BlurException.rule` and define what labels to blur:
+Balanced settings should include:
 
 ```ini
-FACE_MALE = false
-FEMALE_BREAST_EXPOSED = true
-ANUS_EXPOSED = true
-...
-```
-
-* `true` → Blur this label.
-* `false` → Skip blurring for this label.
-
----
-
-##  GUI Application
-
-A modern desktop GUI is available in `SafeVisionGUI.py`.
-
-###  Features
-
-* Drag & drop images/videos
-* Blurring / Masking / Bounding Box mode
-* FFmpeg-based audio merging
-* Codec & frame settings
-* Real-time log panel and live preview
-* Theme toggle (dark/light)
-
-###  Launch
-```bash
-python SafeVisionGUI.py
-```
----
-
-## 🔧 Command-Line Arguments Reference
-
-This section provides comprehensive documentation for all command-line arguments available in SafeVision's core components.
-
-### 🖼️ main.py - Image Processing
-
-**Purpose**: Process individual images with nudity/body and optional safety-object detection.
-
-**Basic Usage**: `python main.py -i input.jpg [options]`
-
-| Argument | Short | Type | Default | Description |
-|----------|-------|------|---------|-------------|
-| `--input` | `-i` | `str` | **Required** | Path to the input image file |
-| `--output` | `-o` | `str` | Auto-generated | Path to save the censored image. If not provided, creates default path |
-| `--blur` | `-b` | `flag` | `False` | Apply blur to NSFW regions instead of drawing detection boxes |
-| `--exception` | `-e` | `str` | `BlurException.rule` | Path to the blur exception rules file for custom filtering |
-| `--full_blur_rule` | `-fbr` | `int` | `0` | Number of exposed regions that trigger full image blur |
-| `--detectors` | | `str` | `nude` | Detector mode: `nude`, `objects`, or `both` |
-| `--object-model` | | `str` | `Models/safety_objects.onnx` | Safety-object ONNX model path |
-| `--object-labels` | | `str` | `Models/safety_objects.labels.json` | Safety-object labels JSON path |
-| `--object-threshold` | | `float` | `0.25` | Minimum safety-object confidence |
-
-**Examples**:
-```bash
-# Basic detection with boxes
-python main.py -i image.jpg
-
-# Apply blur to detected regions
-python main.py -i image.jpg -b
-
-# Use custom blur rules
-python main.py -i image.jpg -e custom_rules.rule
-
-# Full blur if 2+ exposed regions found
-python main.py -i image.jpg -fbr 2
-
-# Detect cigarettes/alcohol/drugs only
-python main.py -i image.jpg -b --detectors objects
-
-# Detect both model families
-python main.py -i image.jpg -b --detectors both
-```
-
-### 🎬 video.py - Video Processing
-
-**Purpose**: Process video files with frame-by-frame nudity/body and optional safety-object detection.
-
-**Basic Usage**: `python video.py -i input.mp4 [options]`
-
-| Argument | Short | Type | Default | Description |
-|----------|-------|------|---------|-------------|
-| `--input` | `-i` | `str` | **Required** | Path to the input video file |
-| `--output` | `-o` | `str` | Auto-generated | Path to save the processed video/frames |
-| `--task` | `-t` | `str` | `video` | Processing mode: `frames` or `video` |
-| `--video_output` | `-vo` | `str` | `video_output` | Directory for video output files |
-| `--rule` | `-r` | `str` | `0/0` | Blur monitoring rule: `percentage/count` format |
-| `--boxes` | `-b` | `flag` | `False` | Create video with detection boxes overlay |
-| `--blur` | | `flag` | `False` | Apply blur when using boxes mode |
-| `--with-audio` | `-a` | `flag` | `False` | Include original audio in output video |
-| `--codec` | `-c` | `str` | `mp4v` | Video codec: `mp4v`, `avc1`, `xvid`, `mjpg` |
-| `--ffmpeg-path` | | `str` | Auto-detect | Custom path to FFmpeg executable |
-| `--delete-frames` | `-df` | `flag` | `False` | Delete frame images after video creation |
-| `--enhanced-blur` | | `flag` | `False` | Use stronger blur that completely obscures content |
-| `--full-blur-rule` | `-fbr` | `str` | None | Full blur rule: `labels/frames` format |
-| `--color` | | `flag` | `False` | Use solid color instead of blur |
-| `--mask-color` | | `str` | `0,0,0` | BGR color for masking (blue,green,red) |
-| `--detectors` | | `str` | `nude` | Detector mode: `nude`, `objects`, or `both` |
-| `--object-model` | | `str` | `Models/safety_objects.onnx` | Safety-object ONNX model path |
-| `--object-labels` | | `str` | `Models/safety_objects.labels.json` | Safety-object labels JSON path |
-| `--object-threshold` | | `float` | `0.25` | Minimum safety-object confidence |
-
-**Examples**:
-```bash
-# Basic video processing
-python video.py -i video.mp4
-
-# Process only frames (no video creation)
-python video.py -i video.mp4 -t frames
-
-# Create video with boxes and audio
-python video.py -i video.mp4 -b -a
-
-# Apply blur monitoring (10% threshold or 50 frames)
-python video.py -i video.mp4 -r 10/50
-
-# Use enhanced blur with custom codec
-python video.py -i video.mp4 --enhanced-blur -c avc1
-
-# Full blur if 2+ exposed labels in 5+ frames
-python video.py -i video.mp4 -fbr 2/5
-
-# Detect safety objects only
-python video.py -i video.mp4 -b --blur --detectors objects
-
-# Detect nudity/body labels plus safety objects
-python video.py -i video.mp4 -b --blur --detectors both
-```
-
-### 📹 live.py - Live Camera Processing
-
-**Purpose**: Real-time nudity detection and censoring from camera input with advanced features.
-
-**Basic Usage**: `python live.py [options]`
-
-| Argument | Short | Type | Default | Description |
-|----------|-------|------|---------|-------------|
-| `--camera` | `-c` | `int` | `0` | Camera ID to use for input (0 = default camera) |
-| `--rules` | `-r` | `str` | Auto-detect | Path to blur exception rules file |
-| `--gender-detection` | `-g` | `flag` | `False` | Enable gender and age detection using best_gender.onnx |
-| `--no-boxes` | | `flag` | `False` | Disable detection boxes display |
-| `--privacy` | | `flag` | `False` | Start in privacy mode (no video display) |
-| `--enhanced-blur` | | `flag` | `False` | Use enhanced blur mode for stronger effect |
-| `--solid-color` | | `flag` | `False` | Use solid color masking instead of blur |
-| `--mask-color` | | `str` | `0,0,0` | Color for solid masking in BGR format |
-| `--auto-record` | | `flag` | `False` | Auto-record when nudity is detected |
-| `--alert-threshold` | | `int` | `3` | Consecutive detections needed for alert |
-| `--skip-frames` | | `int` | `2` | Process every nth frame for performance |
-
-**Examples**:
-```bash
-# Basic live detection
-python live.py
-
-# Use camera 1 with gender detection
-python live.py -c 1 -g
-
-# Privacy mode with custom rules
-python live.py --privacy -r custom.rule
-
-# Enhanced blur with auto-recording
-python live.py --enhanced-blur --auto-record
-
-# Solid color masking (red)
-python live.py --solid-color --mask-color 0,0,255
-```
-
-### 🖥️ safeVisionScreenGuard.py - Desktop Screen Guard
-
-**Purpose**: Protect what is currently visible on your desktop without recording. It captures monitor pixels locally with `mss`, runs SafeVision detection, and draws a transparent always-on-top overlay that blocks or outlines detected unsafe regions.
-
-**Basic Usage**: `python safeVisionScreenGuard.py [options]`
-
-| Argument | Type | Default | Description |
-|----------|------|---------|-------------|
-| `--monitor` | `int` | `1` | Monitor number from `--list-monitors` |
-| `--list-monitors` | `flag` | `False` | Print available monitors and exit |
-| `--mode` | `str` | `box` | Base mode: `box`, `blur`, `block`, `both`, or `privacy` |
-| `--fps` | `float` | `5.0` | Detection frames per second |
-| `--threshold` | `float` | `0.35` | Minimum confidence to display/block |
-| `--providers` | `str` | Auto | Comma-separated ONNX Runtime providers |
-| `--rules` | `str` | `BlurException.rule` | Rule file used to decide what is blocked |
-| `--capture-backend` | `str` | `auto` | Pixel capture backend: `auto`, `gdi`, or `mss` |
-| `--smooth-overlay` / `--no-smooth-overlay` | `flag` | `True` | Merge duplicate boxes, smooth jitter, cache blur patches, and skip unchanged redraws |
-| `--smooth-iou` | `float` | `0.45` | Overlap threshold for duplicate merge and tracking |
-| `--smooth-alpha` | `float` | `0.65` | Box follow speed; lower is steadier, higher follows faster |
-| `--track-hold-ms` | `int` | `350` | Keep the last stable region visible through short missed detections |
-| `--merge-nearby` / `--no-merge-nearby` | `flag` | `True` | Combine nearby body-part detections into one continuous protected region |
-| `--merge-distance` | `int` | `140` | Pixel distance for merging nearby detections |
-| `--merge-overlap` | `float` | `0.35` | Merge nested boxes when this much of the smaller box overlaps |
-| `--feedback-safe-capture` / `--no-feedback-safe-capture` | `flag` | `False` | Briefly hide the overlay during screenshots; useful for diagnostics but can visibly blink |
-| `--capture-hide-ms` | `int` | `20` | Milliseconds to hide the overlay during feedback-safe capture |
-| `--drop-stale-on-screen-change` / `--keep-stale-regions` | `flag` | Drop stale | Remove held boxes immediately when the screen under them changes |
-| `--stale-region-delta` | `float` | `10.0` | Pixel-change threshold used to release stale held boxes |
-| `--screen-change-delta` | `float` | `28.0` | Whole-screen change threshold used to release stale held boxes |
-| `--exclude-overlay-capture` / `--allow-overlay-capture` | `flag` | Exclude | Prevent the guard capture from seeing its own overlay on Windows |
-| `--label-filter` | `str` | `exposed` | `exposed`, `body`, or `all` labels |
-| `--respect-rules` / `--ignore-rules` | `flag` | Respect | Apply or bypass `BlurException.rule` |
-| `--show-boxes` / `--no-boxes` | `flag` | Mode-based | Show or hide detection outlines |
-| `--labels`, `--show-labels`, `--no-labels` | `flag` | `False` | Show or hide labels and confidence |
-| `--blur` / `--no-blur` | `flag` | Mode-based | Draw localized blurred live screen patches |
-| `--block-enabled` / `--no-block` | `flag` | Mode-based | Fill detected regions with a solid color |
-| `--privacy-on-detection` / `--no-privacy` | `flag` | Mode-based | Cover the whole monitor on detection |
-| `--blur-style` | `str` | `gaussian` | `gaussian` or `pixelate` localized blur |
-| `--blur-strength` | `int` | `45` | Local blur or pixelation strength |
-| `--mask-shape` | `str` | `rectangle` | `rectangle` or `ellipse` overlays |
-| `--show-status` | `flag` | `False` | Show a small status HUD |
-| `--no-click-through` | `flag` | `False` | Let overlay receive Escape/key input |
-
-**Examples**:
-```bash
-# Show available monitors
-python safeVisionScreenGuard.py --list-monitors
-
-# Draw boxes around detected exposed regions on monitor 1
-python safeVisionScreenGuard.py --monitor 1 --mode box
-
-# Draw boxes and labels for exposed and covered body labels
-python safeVisionScreenGuard.py --monitor 1 --mode box --label-filter body --show-labels --show-status
-
-# Blur only detected regions while keeping the rest of the screen normal
-python safeVisionScreenGuard.py --monitor 1 --mode blur --show-boxes --label-filter exposed
-
-# Make one continuous stable box for body detections
-python safeVisionScreenGuard.py --monitor 1 --mode blur --show-boxes --show-labels --label-filter body --track-hold-ms 350 --merge-distance 140
-
-# Disable the default smoothing/debug the raw overlay behavior
-python safeVisionScreenGuard.py --monitor 1 --mode blur --show-boxes --no-smooth-overlay
-
-# Test detections without BlurException.rule hiding skipped labels
-python safeVisionScreenGuard.py --monitor 1 --mode box --all-labels --ignore-rules --show-labels
-
-# Cover the whole screen whenever unsafe content is detected
-python safeVisionScreenGuard.py --monitor 1 --mode privacy
-
-# Launch from the console app using settings/configs.json
-python safeVisionCLI.py screen
-
-# Change persistent Screen Guard settings from CLI
-python safeVisionCLI.py settings set screen_guard.mode blur
-python safeVisionCLI.py settings set screen_guard.show_labels true
-python safeVisionCLI.py settings set screen_guard.label_filter body
-python safeVisionCLI.py settings set screen_guard.smooth_overlay false
-python safeVisionCLI.py settings set screen_guard.track_hold_ms 350
-python safeVisionCLI.py settings set screen_guard.merge_distance 140
-python safeVisionCLI.py settings set screen_guard.feedback_safe_capture false
-python safeVisionCLI.py settings set screen_guard.drop_stale_on_screen_change true
-```
-
-OBS is not required for screen guard mode. If OBS WebSocket refuses connection in `live_streamer.py`, start OBS and enable WebSocket, or use `safeVisionScreenGuard.py` for direct desktop protection.
-
-### 🎮 live_streamer.py - Streaming Edition
-
-**Purpose**: Professional streaming solution with OBS integration, virtual camera, and advanced streaming features.
-
-**Basic Usage**: `python live_streamer.py [options]`
-
-| Argument | Short | Type | Default | Description |
-|----------|-------|------|---------|-------------|
-| `--input` | `-i` | `str` | `camera` | Input source: `camera`, `screen`, `window` |
-| `--camera` | `-c` | `int` | `0` | Camera ID for camera input |
-| `--monitor` | `-m` | `int` | `1` | Monitor number for screen capture |
-| `--window` | `-w` | `str` | None | Window title to capture |
-| `--resolution` | | `str` | `1920x1080` | Target resolution (WIDTHxHEIGHT) |
-| `--fps` | | `int` | `60` | Target frames per second |
-| `--ai-fps` | | `int` | `30` | AI processing frames per second |
-| `--obs-host` | | `str` | `localhost` | OBS WebSocket host address |
-| `--obs-port` | | `int` | `4455` | OBS WebSocket port |
-| `--obs-password` | | `str` | Empty | OBS WebSocket password |
-| `--auto-scene-switch` | | `flag` | `False` | Auto switch OBS scenes on detection |
-| `--virtual-cam` | | `flag` | `False` | Enable virtual camera output |
-| `--vcam-fps` | | `int` | `30` | Virtual camera frames per second |
-| `--sensitivity` | | `float` | `0.2` | Detection sensitivity (0.1-0.9) |
-| `--blur-strength` | | `int` | `30` | Blur strength for censoring |
-| `--privacy` | | `flag` | `False` | Privacy mode (no display) |
-| `--safe-timeout` | | `int` | `10` | Safe mode timeout in seconds |
-| `--gpu` | | `flag` | `False` | Enable GPU acceleration |
-| `--quality` | | `str` | `high` | Processing quality: `low`, `medium`, `high` |
-
-**Examples**:
-```bash
-# Basic camera streaming
-python live_streamer.py
-
-# Screen capture for streaming
-python live_streamer.py -i screen -m 1
-
-# OBS integration with virtual camera
-python live_streamer.py --virtual-cam --obs-host localhost
-
-# High sensitivity with GPU acceleration
-python live_streamer.py --sensitivity 0.1 --gpu
-
-# Custom resolution for streaming
-python live_streamer.py --resolution 1280x720 --fps 30
-```
-
-### 🌐 safevision_api.py - REST API Server
-
-**Purpose**: RESTful API server for nudity detection with HTTP endpoints for web integration.
-
-**Basic Usage**: `python safevision_api.py`
-
-**Configuration**: The API server uses configuration constants defined in the file:
-
-| Setting | Default | Description |
-|---------|---------|-------------|
-| `HOST` | `0.0.0.0` | Server host address (0.0.0.0 = all interfaces) |
-| `PORT` | `5000` | Server port number |
-| `MAX_CONTENT_LENGTH` | `50MB` | Maximum file upload size |
-| `MAX_URL_DOWNLOAD_SIZE` | `50MB` | Maximum remote media URL download size |
-| `DEFAULT_THRESHOLD` | `0.25` | Default detection confidence threshold |
-| `DEFAULT_VIDEO_MAX_FRAMES` | `60` | Maximum sampled frames for video URL analysis |
-| `DEFAULT_VIDEO_SAMPLE_SECONDS` | `1.0` | Sample one video frame every N seconds by default |
-
-**Available Endpoints**:
-- `GET /api/v1/health` - Health check and status
-- `POST /api/v1/detect` - Image detection (multipart/form-data)
-- `POST /api/v1/detect/base64` - Image detection (base64 JSON)
-- `GET /api/v1/detect/url?url=...` - Detect image or video from an HTTP/HTTPS media URL
-- `GET /api/v1/detect/media?url=...` - Alias for URL-based media detection
-- `GET /api/v1/labels` - Available detection labels
-- `GET /api/v1/stats` - API usage statistics
-
-**Examples**:
-```bash
-# Start API server
-python safevision_api.py
-
-# Test with curl
-curl -X GET http://localhost:5000/api/v1/health
-curl -X POST -F "file=@test.jpg" http://localhost:5000/api/v1/detect
-
-# Detect an image URL
-curl "http://localhost:5000/api/v1/detect/url?url=https://example.com/image.jpg&threshold=0.3"
-
-# Detect a video URL. Default scans sampled frames and returns media.is_video=true.
-curl "http://localhost:5000/api/v1/detect/url?url=https://example.com/video.mp4&max_frames=30&sample_seconds=1"
-
-# Force a full video frame scan when you need maximum coverage.
-curl "http://localhost:5000/api/v1/detect/url?url=https://example.com/video.mp4&full_scan=true"
-```
-
-### 🖥️ safevision_gui.py - GUI Application
-
-**Purpose**: Advanced PyQt5 desktop application with comprehensive UI for all SafeVision features.
-
-**Basic Usage**: `python safevision_gui.py`
-
-**Features**:
-- No command-line arguments (fully GUI-driven)
-- Drag & drop file interface
-- Real-time processing preview
-- Multi-tabbed workspace with split views
-- Built-in file browser and media viewer
-- Settings management and theme switching
-- Integration with all core SafeVision components
-
-**Examples**:
-```bash
-# Launch GUI application
-python safevision_gui.py
-
-# Note: All configuration is done through the GUI interface
-# No command-line arguments are supported
-```
-
-### 🔗 Common Argument Patterns
-
-**File Paths**:
-- Use absolute paths for reliability: `C:\path\to\file.jpg`
-- Relative paths work from script directory: `./images/test.jpg`
-- Supports various image formats: `.jpg`, `.jpeg`, `.png`, `.bmp`, `.tiff`
-- Video formats: `.mp4`, `.avi`, `.mov`, `.mkv`
-
-**Blur Rules Format**:
-- Single number: `5` (count threshold)
-- Percentage/Count: `10/50` (10% or 50 frames)
-- Labels/Frames: `2/5` (2+ labels in 5+ frames)
-
-**Color Format**:
-- BGR format: `blue,green,red`
-- Examples: `0,0,0` (black), `255,0,0` (blue), `0,255,0` (green), `0,0,255` (red)
-
-**Performance Tips**:
-- Use `--gpu` flag when available for faster processing
-- Adjust `--skip-frames` for real-time performance
-- Lower `--ai-fps` for better system responsiveness
-- Use `--delete-frames` to save disk space in video processing
-
-### 📚 Comprehensive Usage Examples
-
-**Workflow 1: Complete Image Analysis**
-```bash
-# Process image with all options
-python main.py -i input.jpg -b -e custom.rule -fbr 3 -o results/output.jpg
-```
-
-**Workflow 2: Professional Video Processing**
-```bash
-# High-quality video with audio and monitoring
-python video.py -i stream.mp4 -a -r 5/20 --enhanced-blur -c avc1 --delete-frames
-```
-
-**Workflow 3: Live Streaming Setup**
-```bash
-# Complete streaming solution
-python live_streamer.py -i camera --virtual-cam --obs-host localhost --gpu --sensitivity 0.15
-```
-
-**Workflow 4: Surveillance & Monitoring**
-```bash
-# Privacy-focused live detection with recording
-python live.py -c 1 --privacy --auto-record --alert-threshold 2 -r surveillance.rule
-```
-
-**Workflow 5: API-Based Integration**
-```bash
-# Start API server and test detection
-python safevision_api.py
-# In another terminal:
-curl -X POST -F "image=@test.jpg" -F "threshold=0.3" http://localhost:5000/api/v1/detect
-```
-
----
-
-# Live Nudity Detection with Blur Exception Rules & Gender/Age Detection
-
-## Usage Examples
-
-### 1. Basic Usage (Auto-loads blur rules)
-```bash
-python live.py
-```
-- Automatically checks for `BlurException.rule` in the same directory
-- If found and not empty, uses existing rules
-- If not found or empty, creates default rules with all labels set to `true`
-
-### 2. Custom Rules File
-```bash
-python live.py -r custom_rules.rule
-```
-or
-```bash
-python live.py --rules custom_rules.rule
-```
-
-### 3. Enable Gender and Age Detection
-```bash
-python live.py -g
-```
-or
-```bash
-python live.py --gender-detection
-```
-- Requires `best_gender.onnx` model in the `Models/` folder
-- Displays gender (Male/Female) and estimated age for detected faces
-- Shows confidence scores for predictions
-
-### 4. Complete Example with All Features
-```bash
-python live.py -c 0 -r my_rules.rule -g --auto-record --alert-threshold 2
-```
-
-## Blur Exception Rules
-
-### Auto-Loading Behavior:
-- **On startup**: Checks for `BlurException.rule` in same directory
-- **If exists and not empty**: Loads existing rules
-- **If missing or empty**: Creates default rules automatically
-- **Optional -r parameter**: Override auto-loading with specific file
-
-### Rules File Format:
-The rules file uses the format: `LABEL = true/false`
-- `true`: Apply blur/censoring to this detection type
-- `false`: Skip blur/censoring for this detection type
-
-### Available Labels:
-- FEMALE_GENITALIA_EXPOSED
-- MALE_GENITALIA_EXPOSED  
-- FEMALE_BREAST_EXPOSED
-- MALE_BREAST_EXPOSED
-- BUTTOCKS_EXPOSED
-- ANUS_EXPOSED
-- BELLY_EXPOSED
-- FEET_EXPOSED
-- ARMPITS_EXPOSED
-- FACE_FEMALE
-- FACE_MALE
-- FEMALE_GENITALIA_COVERED
-- FEMALE_BREAST_COVERED
-- BUTTOCKS_COVERED
-- ANUS_COVERED
-- BELLY_COVERED
-- FEET_COVERED
-- ARMPITS_COVERED
-
-## Gender/Age Detection
-
-### Requirements:
-- `best_gender.onnx` model in `Models/` directory
-- Model format should match the example in `myai/run.py`
-- Input: 224x224 RGB images
-- Output: Gender classification + Age regression
-
-### Features:
-- **Real-time Analysis**: Analyzes detected faces in real-time
-- **Gender Classification**: Male/Female with confidence scores
-- **Age Estimation**: Estimated age in years
-- **Visual Feedback**: Shows results on status overlay
-- **Runtime Toggle**: Press 'G' key to toggle on/off during runtime
-
-### Status Display:
-When enabled, shows:
-- `Gender Detection: ON/FAILED` in status overlay
-- For each detected face: `Female, 25y (0.95)` format
-- Gender, estimated age, and confidence score
-
-## Command Line Arguments
-
-- `-c, --camera`: Camera ID (default: 0)
-- `-r, --rules`: Path to blur exception rules file (optional - auto-loads if exists)
-- `-g, --gender-detection`: Enable gender and age detection
-- `--no-boxes`: Disable detection boxes
-- `--privacy`: Start in privacy mode
-- `--enhanced-blur`: Use enhanced blur mode
-- `--solid-color`: Use solid color masking
-- `--mask-color`: Color for solid masking (BGR format)
-- `--auto-record`: Auto-record when nudity detected
-- `--alert-threshold`: Consecutive detections for alert
-- `--skip-frames`: Process every nth frame for performance
-
-## Runtime Controls
-
-- **SPACE**: Toggle recording
-- **B**: Toggle detection boxes
-- **P**: Toggle privacy mode  
-- **G**: Toggle gender detection (if enabled)
-- **Q**: Quit application
-
-## Example Rule Configurations
-
-### Strict Mode (Only explicit content)
-```
-FEMALE_GENITALIA_EXPOSED = true
-MALE_GENITALIA_EXPOSED = true
-FEMALE_BREAST_EXPOSED = true
-BUTTOCKS_EXPOSED = true
-ANUS_EXPOSED = true
-MALE_BREAST_EXPOSED = false
-BELLY_EXPOSED = false
-FEET_EXPOSED = false
+BLOCK_IF_CHILD = false
+BLOCK_IF_NSFW_AND_CHILD = true
+PROTECTION_NSFW_MIN_RISK = HIGH
+PROTECTION_NSFW_MIN_CONFIDENCE = 0.5
 ARMPITS_EXPOSED = false
-FACE_FEMALE = false
-FACE_MALE = false
-# All COVERED labels = false
 ```
 
-### Conservative Mode (Maximum privacy)
-```
-# All EXPOSED labels = true
-# Covered areas also censored for privacy
-FEMALE_GENITALIA_COVERED = true
-FEMALE_BREAST_COVERED = true
-BUTTOCKS_COVERED = true
-FACE_FEMALE = false
-FACE_MALE = false
+Restore the balanced profile with:
+
+```powershell
+python safeVisionCLI.py rules use default
 ```
 
-### Face Analysis Mode (Skip censoring, focus on gender/age)
+The project also ships 50 complete rule files for balanced, strict, review,
+object-only, CI, streaming, solid-cover, and low-false-positive workflows.
+Read the catalog before selecting one:
+
+```powershell
+Get-Content ".\rule_templates\README.md"
+python main.py -i ".\input\photo.jpg" -b `
+  -e ".\rule_templates\01_balanced_default.rule"
 ```
-# All labels = false (no censoring)
-# Use with -g flag for gender/age analysis only
-```
 
----
+Copy a preset before editing it. A `.rule` file controls regional censoring,
+child-protection decisions, and the look and text of a whole-media cover. It
+does not enable a model by itself; model selection remains controlled by
+`--detectors` or `settings/configs.json`.
 
-##  How It Works
+If the analysis is safe but the image still looks altered, also check whether
+ordinary regional censoring matched an enabled label. Boxes, regional blur,
+and a policy-driven full cover are three separate output decisions.
 
-###  Pipeline
-
-1. **Preprocessing** – Resize and normalize input image or video frames.
-2. **Inference** – Use `ONNXRuntime` to run the selected detector model(s): `best.onnx`, `safety_objects.onnx`, or both.
-3. **Postprocessing** – Convert YOLO outputs into bounding boxes, labels, scores, categories, and source model metadata.
-4. **Censorship** – Apply blur/mask/box per user rules, including `BlurException.rule` object-label rules.
-5. **Rendering** – Save censored images/videos to output folders.
-
----
-
-## 📂 Output Directory Structure
-
-| Folder          | Description                      |
-| --------------- | -------------------------------- |
-| `output/`       | Final censored images/videos     |
-| `blur/`         | Full blurred content             |
-| `prosses/`      | Detection-only visuals (no blur) |
-| `video_output/` | Rendered final videos            |
-
----
-
-## 📷 NSFW Demo (Spoiler Warning)
-
-<details>
-  <summary>⚠️ Click to Show Example Output Image using SafeVisionGUI (Contains NSFW Examples with Blurring)</summary>
-  <p>
-
-![Blurred Output](https://github.com/user-attachments/assets/a62d64d1-199c-4d28-a34f-46c53ba056e6)
-
-*Example showing SafeVision blurring applied on exposed content. using the SafeVisionGUI*
-
-  </p>
-</details>
-<details>
-  <summary>⚠️ Click to Show Example Output using CLI (main.py) (Contains NSFW Examples with Blurring)</summary>
-  <p>
-
-![Blurred Output](https://github.com/user-attachments/assets/5a9b362b-e103-427c-b10d-8f6157578f10)
-
-*Example showing SafeVision blurring applied on exposed content.*
-
-  </p>
 </details>
 
----
-### Conclusion
-SafeVision provides a robust solution for detecting and blurring nudity in images and videos, making it a valuable tool for content moderation and safe media sharing. Follow the instructions in this README to set up and use SafeVision effectively. 
+<details>
+<summary><strong>🔊 A processed video has no audio</strong></summary>
+
+Install FFmpeg and either place it on `PATH` or pass its executable path:
+
+```powershell
+python video.py `
+  -i ".\input\video.mp4" `
+  -b --blur -a `
+  --ffmpeg-path "C:\ffmpeg\bin\ffmpeg.exe"
+```
+
+SafeVision processes video frames through OpenCV, then asks FFmpeg to merge or
+transcode audio when `-a` / `--with-audio` is enabled. If FFmpeg is unavailable,
+the visual result can still be produced but audio cannot be guaranteed.
+
+</details>
+
+<details>
+<summary><strong>🌐 The API returns HTTP 503 for age or gender</strong></summary>
+
+This normally means a requested model is unavailable, invalid, or cannot be
+loaded by the installed ONNX Runtime. Confirm the API process can read the
+configured path:
+
+```dotenv
+SAFEVISION_AGE_GENDER_MODEL=Models/onnx-communityage-gender-prediction-ONNX.onnx
+SAFEVISION_DETECTORS=nude,age,gender
+```
+
+Restart the API after editing `.env`, then check:
+
+```powershell
+Invoke-RestMethod http://127.0.0.1:5000/api/v1/health
+```
+
+For an intentionally NSFW-only service, set `SAFEVISION_DETECTORS=nude`.
+
+</details>
+
+<details>
+<summary><strong>🧱 Confirm that a solid cover contains no source pixels</strong></summary>
+
+Run the focused regression directly:
+
+```powershell
+python -m unittest discover -s tests -p "test_age_gender_detector.py" `
+  -k "solid_full_cover" -v
+```
+
+For production-sensitive exports, prefer `gray`, `black`, or `color`. A blur is
+visually obscuring, but it intentionally retains derived shapes and color;
+solid covers replace the entire frame.
+
+</details>
+
+<details>
+<summary><strong>⌨️ Show every available command option</strong></summary>
+
+```powershell
+python main.py --help
+python video.py --help
+python safeVisionCLI.py --help
+python live.py --help
+python safeVisionScreenGuard.py --help
+python live_streamer.py --help
+```
+
+The help output is the source of truth for the installed checkout. Use it when
+a script, release, or branch may be newer than this document.
+
+</details>
+
+<p align="right"><a href="#top">⬆️ Back to top</a></p>
+
+<a id="testing"></a>
+
+## ✅ Testing and release checks
+
+Run the focused SafeVision regression suite from the repository root:
+
+```powershell
+python -m unittest discover -s tests -p "test_*.py" -v
+```
+
+The current suite contains ten focused tests for age/gender batching,
+missing-model errors, ONNX Runtime compatibility, detector selection,
+independent age and gender switches, NumPy face boxes, compound-policy false
+positives, and opaque full-cover rendering.
+
+If the companion `vision2` service is checked out beside SafeVision, run its
+five matching service-policy tests too:
+
+```powershell
+Push-Location "..\vision2"
+python -m unittest discover -s tests -p "test_*.py" -v
+Pop-Location
+```
+
+The isolated `vision2` policy tests can print a local MySQL connection warning
+when no development database is running. Use the test result and process exit
+code to determine success; start MySQL separately for database integration
+testing.
+
+| Check | What it protects | When to run |
+|---|---|---|
+| Unit suite | Detector contracts, policy gates, missing-model behavior | Every change |
+| `python safeVisionCLI.py status` | Models, directories, rules, runtime health | Every install or deployment |
+| Safe family-image sample | Low-false-positive balanced policy | Before a policy release |
+| Adult + child + qualified NSFW test fixture | Compound protection decision and reason text | Before a protection release |
+| Solid full-cover sample | No source pixels survive in the final frame | Before public or compliance exports |
+| Short video with audio | Frames, reports, timing, audio remux | Before a video release |
+| API health + upload | HTTP status, JSON schema, result retrieval | Before deploying the web service |
+
+> [!NOTE]
+> The unit suites use controlled sessions and fixtures; they do not replace
+> evaluation on a representative, lawfully obtained validation set. Age and
+> gender estimates can be biased or inaccurate across lighting, camera quality,
+> occlusion, presentation, and demographic groups.
+
+<details>
+<summary><strong>🧪 Suggested manual smoke test</strong></summary>
+
+```powershell
+# 1. Validate installation and available providers
+python safeVisionCLI.py status
+python safeVisionCLI.py providers
+
+# 2. Produce a public-facing image with no boxes or reviewer copy
+python main.py -i ".\input\photo.jpg" -o ".\output\photo_checked.jpg" `
+  -b --no-boxes --no-save-boxes-copy --save-blur-copy
+
+# 3. Produce an opaque video and keep audio when available
+python video.py -i ".\input\video.mp4" -b --blur --with-audio `
+  --force-full-cover --full-cover-mode black --no-full-cover-text
+
+# 4. Start the API and inspect its health in a second terminal
+Set-Location ".\SafeVision Web API"
+python app.py
+```
+
+Second terminal:
+
+```powershell
+Invoke-RestMethod http://127.0.0.1:5000/api/v1/health
+```
+
+</details>
+
+<p align="right"><a href="#top">⬆️ Back to top</a></p>
+
+<a id="demos"></a>
+
+## 🎞️ Demo gallery
+
+These previews come from the original SafeVision project page and demonstrate
+the censoring output. Open each panel only when you want to load the image.
+
+<table>
+<tr>
+<td width="50%" valign="top">
+
+<details>
+<summary><strong>🖥️ GUI blurred-image example</strong></summary>
+
+<br>
+
+![SafeVision GUI blurred output example](https://github.com/user-attachments/assets/a62d64d1-199c-4d28-a34f-46c53ba056e6)
+
+</details>
+
+</td>
+<td width="50%" valign="top">
+
+<details>
+<summary><strong>⌨️ CLI blurred-image example</strong></summary>
+
+<br>
+
+![SafeVision CLI blurred output example](https://github.com/user-attachments/assets/5a9b362b-e103-427c-b10d-8f6157578f10)
+
+</details>
+
+</td>
+</tr>
+</table>
+
+When comparing an output, check more than whether it “looks blurred”:
+
+| Review point | Expected result |
+|---|---|
+| Public image | No unredacted reviewer copy is published |
+| Regional censor | Only enabled rule labels are obscured |
+| Policy block | Whole-media cover and centered reason match the selected rule |
+| Solid cover | Original pixels are replaced, not merely softened |
+| Boxes | Visible only when explicitly requested for review or debugging |
+| Analysis JSON | Explains checks, evidence, policy decision, and rendering separately |
+| Video | Policy persists across the intended frames and audio behavior is known |
+
+> [!TIP]
+> GitHub-hosted preview images may not load in an offline README viewer. The
+> actual application does not require these demo assets.
+
+<p align="right"><a href="#top">⬆️ Back to top</a></p>
+
+<a id="responsible-use"></a>
+
+## ⚖️ Responsible use
+
+SafeVision is a moderation and monitoring toolkit. It can surface evidence and
+apply a configured visual treatment; it cannot determine identity, intent,
+legality, consent, or a person's verified age.
+
+> [!CAUTION]
+> Never treat an estimated age, gender output, detector label, or generated
+> warning message as a legal conclusion. High-impact decisions need qualified
+> human review and procedures appropriate to the jurisdiction and organization.
+
+| Risk | Recommended guardrail |
+|---|---|
+| Age estimate near the threshold | Use the review margin and route the item to a trained reviewer |
+| Gender classification | Treat it as a limited model output, not a person's identity |
+| False positive | Keep detector evidence and policy reasoning separate in logs |
+| False negative | Use defense in depth; do not make this the only safety control |
+| Sensitive original media | Minimize storage, restrict access, encrypt transport, and delete on schedule |
+| Reviewer copy | Keep `--save-boxes-copy` off unless an authorized workflow requires it |
+| Public API | Add authentication, TLS, rate limits, request limits, and network controls |
+| Video/audio | Confirm that preserved audio and exported frames follow the same retention policy |
+
+Before deploying SafeVision:
+
+1. Define the permitted purpose, media sources, retention period, and reviewers.
+2. Validate the exact models and thresholds against representative data.
+3. Choose balanced or stricter rules intentionally; do not silently change a
+   production policy.
+4. Keep raw media, reviewer artifacts, reports, and public outputs in separate
+   access-controlled locations.
+5. Record model versions, rule versions, configuration, and decision reasons.
+6. Provide an appeal or secondary-review path for consequential outcomes.
+7. Confirm that local law and organizational policy permit processing and
+   retaining the submitted media.
+
+See [CHILD_PROTECTION.md](CHILD_PROTECTION.md) for the detailed decision model,
+threshold guidance, and limitations.
+
+<p align="right"><a href="#top">⬆️ Back to top</a></p>
+
+<a id="contributing"></a>
+
+## 🤝 Contributing
+
+Bug reports, documentation improvements, rule presets, tests, and focused code
+changes are welcome. Small pull requests with a clear safety impact are much
+easier to review than large mixed rewrites.
+
+```powershell
+git clone https://github.com/im-syn/SafeVision.git
+Set-Location .\SafeVision
+git switch -c feature/short-description
+python -m pip install -r requirements.txt
+python -m unittest discover -s tests -p "test_*.py" -v
+```
+
+<details>
+<summary><strong>📋 Pull-request checklist</strong></summary>
+
+- Explain the user-facing problem and the chosen behavior.
+- Include a command, request, or fixture that reproduces the previous behavior.
+- Add or update focused tests for policy, privacy, and rendering changes.
+- Keep age estimates and gender outputs clearly described as estimates.
+- Document new flags, environment keys, response fields, and generated files.
+- Do not commit model binaries, private media, runtime uploads, or uncensored
+  reviewer outputs.
+- Run `git diff --check` and the focused test suite before opening the PR.
+- Include screenshots only when they are safe and necessary to review the UI.
+
+</details>
+
+Useful places to start:
+
+- [Open an issue](https://github.com/im-syn/SafeVision/issues/new) for a bug or
+  feature proposal.
+- [Review existing issues](https://github.com/im-syn/SafeVision/issues) before
+  starting overlapping work.
+- [Open a pull request](https://github.com/im-syn/SafeVision/compare) when the
+  change and tests are ready.
+- Read [CHANGELOG.md](CHANGELOG.md) for release-level changes and
+  [rule_templates/README.md](rule_templates/README.md) before adding a preset.
+
+<p align="right"><a href="#top">⬆️ Back to top</a></p>
+
+<a id="support"></a>
+
+## 🛠️ Maintainer and support
+
+SafeVision is maintained by [@im-syn](https://github.com/im-syn).
+
+- Questions and reproducible bugs: [GitHub Issues](https://github.com/im-syn/SafeVision/issues)
+- Proposed fixes and improvements: [Pull Requests](https://github.com/im-syn/SafeVision/pulls)
+- Release history: [CHANGELOG.md](CHANGELOG.md)
+- Web-service setup: [SafeVision Web API/README.md](SafeVision%20Web%20API/README.md)
+- Documentation center: [docs/README.md](docs/README.md)
+- Project organization: [docs/PROJECT_STRUCTURE.md](docs/PROJECT_STRUCTURE.md)
+- Model provenance and hashes: [Models/README.md](Models/README.md)
+- Code/model licensing boundaries: [docs/LICENSING.md](docs/LICENSING.md)
+
+Please do not attach private, illegal, or uncensored sensitive media to a public
+issue. Reproduce with a safe synthetic fixture or describe the behavior without
+uploading the original.
+
+<a id="license"></a>
+
+## 📜 Licensing
+
+The SafeVision-owned source in this checkout is distributed under the exact
+terms in [LICENSE](LICENSE), with attribution and third-party information in
+[NOTICE](NOTICE). **Model weights are separately licensed artifacts.**
+
+The current source license is Apache-2.0: personal, research, and commercial
+source-code use is permitted under its terms. A redistribution must preserve
+the license and applicable attribution notices, including the SafeVision
+notice. A clear product acknowledgment can use: `Includes SafeVision software
+(https://github.com/im-syn/SafeVision).` This source-code permission does not
+clear any model weight, base weight, training dataset, or dependency.
+
+- `best.onnx` declares Ultralytics AGPL-3.0 in embedded metadata;
+- `safety_objects.onnx` was fine-tuned/exported through Ultralytics and also
+  declares AGPL-3.0;
+- the optional age/gender ONNX repository declares Apache-2.0;
+- the removed legacy `best_gender.onnx` has no established license and should
+  not be redistributed or approved for production.
+
+Commercial clearance therefore depends on the exact source release, selected
+models, base weights, datasets, dependencies, and deployment model. Read the
+[professional licensing guide](docs/LICENSING.md) and
+[model registry](Models/README.md) before redistributing or integrating
+SafeVision into a product.
 
 ---
 
-## 🛠 Maintainer & Support
+<div align="center">
 
-Maintained by [@im-syn](https://github.com/im-syn)
-Pull requests, issues, and contributions are welcome!
-
----
-
-> **Note:** This project is intended for ethical and responsible use only. Always follow legal and platform-specific content handling policies.
-
-
----
 ## ☕ Like It?
 
-If this helped you, consider giving the repo a 🌟 or forking it to your toolkit.
-Thank you for using **SafeContentText**! Feel free to open issues or PRs for improvements.
+If SafeVision helped you, consider giving the repository a 🌟 or forking it
+into your toolkit. Thank you for using **SafeVision**! Issues and pull requests
+are always welcome.
+
+[![Star SafeVision](https://img.shields.io/github/stars/im-syn/SafeVision?style=for-the-badge&logo=github&label=Star&color=f5c542)](https://github.com/im-syn/SafeVision/stargazers)
+[![Fork SafeVision](https://img.shields.io/github/forks/im-syn/SafeVision?style=for-the-badge&logo=github&label=Fork&color=7c5cff)](https://github.com/im-syn/SafeVision/fork)
+[![Open an issue](https://img.shields.io/github/issues/im-syn/SafeVision?style=for-the-badge&logo=github&label=Issues&color=ef476f)](https://github.com/im-syn/SafeVision/issues)
+[![Contribute](https://img.shields.io/github/issues-pr/im-syn/SafeVision?style=for-the-badge&logo=github&label=Pull%20Requests&color=06d6a0)](https://github.com/im-syn/SafeVision/pulls)
+
+<br>
+
+<a href="#top">⬆️ Back to the top</a>
+
+<br><br>
+
+<a href="https://github.com/im-syn/SafeVision">
+  <img src="https://i.ibb.co/d4LqhX4/Safe-Vision-2.png" alt="SafeVision logo" width="420">
+</a>
+
+<sub>Built for configurable, local-first visual moderation.</sub>
+
+</div>

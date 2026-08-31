@@ -1,0 +1,23 @@
+SafeVision
+Copyright 2024-2026 SYN / im-syn
+
+This product includes software developed for the SafeVision project:
+https://github.com/im-syn/SafeVision
+
+Required Notice: This product includes SafeVision software
+(https://github.com/im-syn/SafeVision).
+
+Model weights are separate works and are not automatically covered by the
+SafeVision source-code license. See Models/README.md and docs/LICENSING.md.
+
+The files Models/best.onnx and Models/safety_objects.onnx contain embedded
+metadata identifying Ultralytics and AGPL-3.0. Ultralytics licensing information
+is available at https://www.ultralytics.com/license.
+
+The optional age/gender model is published by
+onnx-community/age-gender-prediction-ONNX under Apache License 2.0 according to
+its model card:
+https://huggingface.co/onnx-community/age-gender-prediction-ONNX
+
+The legacy best_gender.onnx model has no established origin or license and is
+not part of the supported SafeVision model set.

@@ -1,0 +1,59 @@
+# Moderate and above
+# Censors buttocks plus all HIGH and CRITICAL regions.
+# Recommended detectors: nude,age,gender
+# Age and gender values are model estimates and require human review for high-stakes decisions.
+
+FEMALE_GENITALIA_COVERED = false
+FACE_FEMALE = false
+BUTTOCKS_EXPOSED = true
+FEMALE_BREAST_EXPOSED = true
+FEMALE_GENITALIA_EXPOSED = true
+MALE_BREAST_EXPOSED = false
+ANUS_EXPOSED = true
+FEET_EXPOSED = false
+BELLY_COVERED = false
+FEET_COVERED = false
+ARMPITS_COVERED = false
+ARMPITS_EXPOSED = false
+FACE_MALE = false
+BELLY_EXPOSED = false
+MALE_GENITALIA_EXPOSED = true
+ANUS_COVERED = false
+FEMALE_BREAST_COVERED = false
+BUTTOCKS_COVERED = false
+
+# Optional safety-object labels
+cigarette = true
+cigar = true
+vape = true
+smoking_pipe = true
+joint = true
+alcohol_bottle = true
+beer_bottle = true
+wine_glass = true
+beer_glass = true
+cocktail_glass = true
+pill = true
+pill_bottle = true
+syringe = true
+cannabis_leaf = true
+drug_bag = true
+
+# Child-protection and full-cover policy
+BLOCK_IF_NSFW_AND_CHILD = true
+BLOCK_IF_CHILD = false
+BLOCK_ON_AGE_REVIEW = false
+PROTECTION_NSFW_MIN_RISK = HIGH
+PROTECTION_NSFW_MIN_CONFIDENCE = 0.5
+UNDERAGE_AGE = 18
+AGE_REVIEW_MARGIN = 3
+FULL_COVER_MODE = blur
+FULL_COVER_COLOR = 96,96,96
+FULL_COVER_TEXT_COLOR = 255,255,255
+FULL_COVER_SHOW_TEXT = true
+FULL_COVER_BLUR_STRENGTH = 99
+FULL_COVER_MESSAGE_NSFW = Explicit content hidden
+FULL_COVER_MESSAGE_NSFW_AND_CHILD = Possible illegal content - review required
+FULL_COVER_MESSAGE_CHILD = Estimated underage person - review required
+FULL_COVER_MESSAGE_REVIEW = Age review required
+FULL_COVER_MESSAGE_GENERIC = Content hidden by SafeVision policy

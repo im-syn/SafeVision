@@ -1,12 +1,39 @@
 __pycache__/
 *.py[cod]
+.venv/
+venv/
+.env
+**/.env
+.pytest_cache/
+.coverage
+.DS_Store
+Thumbs.db
+safevision_settings.json
 
 # Runtime/generated artifacts
 Models/*_opset15.onnx
+Models/onnx-communityage-gender-prediction-ONNX.onnx
+ffmpeg/
 output_frames/
 video_output/
 video_outputs/
 api_uploads/
 api_outputs/
 api_temp/
+SafeVision Web API/runtime/*
+!SafeVision Web API/runtime/README.md
 detection_log.json
+*.log
+stderr.log
+
+# User inputs and generated outputs. Keep only placeholder files.
+input/*
+!input/README.md
+output/*
+!output/README.md
+Blur/*
+!Blur/README.md
+Prosses/*
+!Prosses/README.md
+Logs/*
+!Logs/README.md

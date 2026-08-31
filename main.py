@@ -1,5 +1,6 @@
 import os
 import math
+import json
 import cv2
 import numpy as np
 import onnx
@@ -7,18 +8,33 @@ from onnx import version_converter
 import onnxruntime
 import argparse
 from safevision_utils import (
+    apply_full_cover,
     apply_region_censor,
     cv2_imread,
     cv2_imwrite,
     create_onnx_session,
     detection_is_censorable,
+    detection_is_nsfw,
+    full_cover_message,
+    full_cover_options,
+    full_cover_reason_kind,
     load_blur_exception_rules,
+    load_protection_rules,
     make_blur_kernel,
     normalize_mask_shape,
     parse_provider_list,
     parse_detector_selection,
+    protection_nsfw_summary,
 )
 from object_detector import DEFAULT_OBJECT_LABELS, DEFAULT_OBJECT_MODEL, ObjectContentDetector
+from age_gender_detector import (
+    AgeGenderDetector,
+    AgeGenderModelMissingError,
+    default_model_path as default_age_gender_model_path,
+    evaluate_protection_policy,
+    face_boxes_from_detections,
+    face_result_to_detection,
+)
 
 __labels = [
     "FEMALE_GENITALIA_COVERED",
@@ -166,10 +182,10 @@ def download_model(url, save_path):
         return False
 
 class NudeDetector:
-    def __init__(self, providers=None):
+    def __init__(self, providers=None, model_path=None):
         # Set up model paths
         model_dir = os.path.join(os.path.dirname(__file__), "Models")
-        model_orig = os.path.join(model_dir, "best.onnx")
+        model_orig = os.path.abspath(os.fspath(model_path or os.path.join(model_dir, "best.onnx")))
         
         # Check if model exists, if not download it
         if not os.path.exists(model_orig):
@@ -334,6 +350,24 @@ def parse_args():
         help="Apply blur to NSFW regions instead of drawing boxes",
     )
     parser.add_argument(
+        "--boxes",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Draw detection boxes on the final image (default: enabled; use --no-boxes to hide them).",
+    )
+    parser.add_argument(
+        "--save-boxes-copy",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="Save the unredacted debug image with boxes in Prosses/ (default: disabled for privacy).",
+    )
+    parser.add_argument(
+        "--save-blur-copy",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Save a clean regional-censor copy in Blur/ (default: enabled).",
+    )
+    parser.add_argument(
         "-e",
         "--exception",
         type=str,
@@ -345,7 +379,7 @@ def parse_args():
         "--full_blur_rule",
         type=int,
         default=0,
-        help="Number of exposed boxes to trigger full image blur",
+        help="Number of censorable NSFW exposed boxes that triggers the selected whole-image cover.",
     )
     parser.add_argument(
         "--mask-shape",
@@ -384,10 +418,16 @@ def parse_args():
         help="Comma-separated ONNX Runtime providers, e.g. CUDAExecutionProvider,CPUExecutionProvider",
     )
     parser.add_argument(
+        "--nsfw-model",
+        type=str,
+        default=None,
+        help="Optional path to the SafeVision NSFW ONNX model (default: Models/best.onnx).",
+    )
+    parser.add_argument(
         "--detectors",
         type=str,
-        default="nude",
-        help="Detector set to use: nude, objects, or both. Comma-separated values are accepted.",
+        default="nude,age,gender",
+        help="Checks to run: nude, age, gender, objects, demographics, protection, or all.",
     )
     parser.add_argument(
         "--object-model",
@@ -406,6 +446,99 @@ def parse_args():
         type=float,
         default=0.25,
         help="Minimum confidence for safety-object detections.",
+    )
+    parser.add_argument(
+        "--age-gender-model",
+        type=str,
+        default=str(default_age_gender_model_path()),
+        help="Path to the age/gender ONNX model. An enabled age/gender check fails clearly when it is missing.",
+    )
+    parser.add_argument(
+        "--underage-age",
+        type=float,
+        default=None,
+        help="Estimated age below which a face is flagged as underage. Defaults to the rule file value (18).",
+    )
+    parser.add_argument(
+        "--age-review-margin",
+        type=float,
+        default=None,
+        help="Years above the underage threshold that require review. Defaults to the rule file value (3).",
+    )
+    parser.add_argument("--min-face-size", type=int, default=32, help="Minimum face size in pixels for fallback face detection.")
+    parser.add_argument("--face-padding", type=float, default=0.18, help="Padding around face crops as a fraction of face size.")
+    parser.add_argument(
+        "--full-cover-mode",
+        "--full-blur-mode",
+        choices=["blur", "gray", "black", "color"],
+        default=None,
+        help="Whole-image cover used when policy or -fbr triggers. Solid modes reveal no source pixels.",
+    )
+    parser.add_argument(
+        "--full-cover-color",
+        default=None,
+        help="Custom full-cover color as B,G,R or #RRGGBB (used by mode=color).",
+    )
+    parser.add_argument(
+        "--full-cover-text-color",
+        default=None,
+        help="Centered warning text color as B,G,R or #RRGGBB.",
+    )
+    parser.add_argument(
+        "--full-cover-text",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="Show or hide the centered full-cover warning.",
+    )
+    parser.add_argument(
+        "--full-cover-message",
+        default=None,
+        help="Override the centered warning for this run.",
+    )
+    parser.add_argument(
+        "--force-full-cover",
+        action="store_true",
+        help="Cover the whole image even when no automatic policy rule matched.",
+    )
+    parser.add_argument(
+        "--block-if-nsfw-and-child",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="Override BLOCK_IF_NSFW_AND_CHILD from the rule file.",
+    )
+    parser.add_argument(
+        "--block-if-child",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="Override BLOCK_IF_CHILD from the rule file.",
+    )
+    parser.add_argument(
+        "--block-on-age-review",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="Override BLOCK_ON_AGE_REVIEW from the rule file.",
+    )
+    parser.add_argument(
+        "--child-nsfw-min-risk",
+        choices=["LOW", "MODERATE", "HIGH", "CRITICAL"],
+        default=None,
+        help="Minimum NSFW risk tier allowed to combine with an estimated child result.",
+    )
+    parser.add_argument(
+        "--child-nsfw-min-confidence",
+        type=float,
+        default=None,
+        help="Minimum NSFW confidence (0..1) for the compound child-protection rule.",
+    )
+    parser.add_argument(
+        "--fail-on-policy",
+        action="store_true",
+        help="Exit with status 2 when the child-protection policy blocks the image (useful in CI).",
+    )
+    parser.add_argument(
+        "--fail-on-underage",
+        action="store_true",
+        help="Exit with status 3 whenever an estimated underage face is found, even if policy allows it.",
     )
     return parser.parse_args()
 
@@ -430,11 +563,26 @@ def _parse_bgr_color(value, default=(0, 0, 0)):
     return default
 
 
-def _run_selected_detectors(image_path, enabled_detectors, providers, object_model, object_labels, object_threshold):
+def _run_selected_detectors(
+    image_path,
+    enabled_detectors,
+    providers,
+    object_model,
+    object_labels,
+    object_threshold,
+    age_gender_model,
+    underage_age,
+    age_review_margin,
+    min_face_size,
+    face_padding,
+    nsfw_model=None,
+):
     detections = []
+    nude_detections = []
     if "nude" in enabled_detectors:
-        detector = NudeDetector(providers=providers)
-        detections.extend(detector.detect(image_path))
+        detector = NudeDetector(providers=providers, model_path=nsfw_model)
+        nude_detections = detector.detect(image_path)
+        detections.extend(nude_detections)
 
     if "objects" in enabled_detectors:
         object_detector = ObjectContentDetector(
@@ -445,7 +593,42 @@ def _run_selected_detectors(image_path, enabled_detectors, providers, object_mod
         )
         detections.extend(object_detector.detect_image(image_path))
 
-    return detections
+    demographics = {
+        "enabled": False,
+        "age_enabled": False,
+        "gender_enabled": False,
+        "faces_detected": 0,
+        "faces": [],
+        "underage_detected": None,
+        "review_required": False,
+    }
+    if "age" in enabled_detectors or "gender" in enabled_detectors:
+        frame = cv2_imread(image_path)
+        if frame is None:
+            raise FileNotFoundError(f"Could not read image: {image_path}")
+        face_boxes = face_boxes_from_detections(
+            nude_detections,
+            width=frame.shape[1],
+            height=frame.shape[0],
+        )
+        demographic_detector = AgeGenderDetector(
+            model_path=age_gender_model,
+            providers=providers,
+            min_face_size=min_face_size,
+            face_padding=face_padding,
+        )
+        demographics = demographic_detector.analyze_frame(
+            frame,
+            face_boxes=face_boxes or None,
+            age_enabled="age" in enabled_detectors,
+            gender_enabled="gender" in enabled_detectors,
+            age_threshold=underage_age,
+            review_margin=age_review_margin,
+            face_source="safevision_nsfw_faces" if face_boxes else None,
+        )
+        detections.extend(face_result_to_detection(face) for face in demographics.get("faces", []))
+
+    return detections, demographics
 
 
 def _draw_label(image, text, x, y, color):
@@ -453,7 +636,16 @@ def _draw_label(image, text, x, y, color):
     cv2.putText(image, text, (x, max(12, y - 5)), font, 0.5, color, 1, cv2.LINE_AA)
 
 
-def render_image_outputs(args, detections, rules, blur_kernel, mask_shape, solid_color):
+def render_image_outputs(
+    args,
+    detections,
+    rules,
+    blur_kernel,
+    mask_shape,
+    solid_color,
+    protection_policy=None,
+    protection_rules=None,
+):
     img = cv2_imread(args.input)
     if img is None:
         raise FileNotFoundError(f"Could not read image: {args.input}")
@@ -463,6 +655,7 @@ def render_image_outputs(args, detections, rules, blur_kernel, mask_shape, solid
     img_combined = img.copy()
     image_height, image_width = img.shape[:2]
     censorable_count = 0
+    nsfw_censorable_count = 0
     log_data = []
 
     for detection in detections:
@@ -479,11 +672,20 @@ def render_image_outputs(args, detections, rules, blur_kernel, mask_shape, solid
         category = detection.get("category") or ("exposed" if "EXPOSED" in str(label).upper() else "other")
         source = detection.get("source", "nude")
         is_censorable = detection_is_censorable(detection)
-        should_blur = rules.get(label, True)
-        color = (0, 0, 255) if is_censorable else (0, 255, 0)
-        label_text = f"{label} {score:.2f}"
-        if is_censorable and "EXPOSED" in str(label).upper():
+        should_blur = rules.get(label, is_censorable)
+        if label == "CHILD":
+            color = (0, 165, 255)
+        elif label == "AGE_REVIEW":
+            color = (0, 215, 255)
+        elif is_censorable and not should_blur:
+            color = (160, 160, 160)
+        else:
+            color = (0, 0, 255) if is_censorable else (0, 255, 0)
+        label_text = detection.get("display_label") or f"{label} {score:.2f}"
+        if is_censorable and should_blur and "EXPOSED" in str(label).upper():
             label_text = f"Unsafe, {label} {score:.2f}"
+        elif is_censorable and not should_blur:
+            label_text = f"Allowed by rule, {label} {score:.2f}"
 
         log_data.append(
             {
@@ -493,12 +695,14 @@ def render_image_outputs(args, detections, rules, blur_kernel, mask_shape, solid
                 "source": source,
                 "box": [x1, y1, x2 - x1, y2 - y1],
                 "censor": is_censorable,
-                "blur": bool(should_blur),
+                "blur": bool(is_censorable and should_blur),
             }
         )
 
-        if is_censorable:
+        if is_censorable and should_blur:
             censorable_count += 1
+            if detection_is_nsfw(detection):
+                nsfw_censorable_count += 1
 
         if is_censorable and should_blur:
             apply_region_censor(
@@ -525,20 +729,35 @@ def render_image_outputs(args, detections, rules, blur_kernel, mask_shape, solid
                     mask_shape=mask_shape,
                 )
 
-        cv2.rectangle(img_boxes, (x1, y1), (x2, y2), color, 2)
-        _draw_label(img_boxes, label_text, x1, y1, color)
-        cv2.rectangle(img_combined, (x1, y1), (x2, y2), color, 2)
-        _draw_label(img_combined, label_text, x1, y1, color)
+        if args.save_boxes_copy:
+            cv2.rectangle(img_boxes, (x1, y1), (x2, y2), color, 2)
+            _draw_label(img_boxes, label_text, x1, y1, color)
+        if args.boxes:
+            cv2.rectangle(img_combined, (x1, y1), (x2, y2), color, 2)
+            _draw_label(img_combined, label_text, x1, y1, color)
 
-    if args.full_blur_rule > 0 and censorable_count >= args.full_blur_rule:
-        if args.color:
-            img_blur[:, :] = solid_color
-            if args.blur:
-                img_combined[:, :] = solid_color
-        else:
-            img_blur = cv2.GaussianBlur(img_blur, (blur_kernel[0], blur_kernel[1]), blur_kernel[2])
-            if args.blur:
-                img_combined = cv2.GaussianBlur(img_combined, (blur_kernel[0], blur_kernel[1]), blur_kernel[2])
+    protection_blocked = bool((protection_policy or {}).get("blocked"))
+    count_rule_triggered = bool(args.full_blur_rule > 0 and nsfw_censorable_count >= args.full_blur_rule)
+    full_cover_applied = bool(protection_blocked or count_rule_triggered or args.force_full_cover)
+    cover_options = full_cover_options(
+        protection_rules,
+        {
+            "FULL_COVER_MODE": args.full_cover_mode,
+            "FULL_COVER_COLOR": args.full_cover_color,
+            "FULL_COVER_TEXT_COLOR": args.full_cover_text_color,
+            "FULL_COVER_SHOW_TEXT": args.full_cover_text,
+        },
+    )
+    reason_kind = full_cover_reason_kind(
+        protection_policy,
+        nsfw_triggered=count_rule_triggered,
+    )
+    if args.force_full_cover and reason_kind == "generic":
+        reason_kind = "generic"
+    cover_message = full_cover_message(cover_options, reason_kind, args.full_cover_message)
+    if full_cover_applied:
+        img_blur = apply_full_cover(img_blur, cover_options, cover_message)
+        img_combined = apply_full_cover(img_combined, cover_options, cover_message)
 
     output_path = args.output
     if not output_path:
@@ -546,13 +765,22 @@ def render_image_outputs(args, detections, rules, blur_kernel, mask_shape, solid
         suffix = "_Blur" if args.blur else "_Detect"
         output_path = f"output/{os.path.basename(input_path)}{suffix}{ext}"
 
-    blur_path = f"Blur/{os.path.basename(output_path)}"
-    detect_path = f"Prosses/{os.path.basename(output_path)}"
-    final_image = img_combined if args.blur else img_boxes
+    blur_path = f"Blur/{os.path.basename(output_path)}" if args.save_blur_copy else None
+    detect_path = f"Prosses/{os.path.basename(output_path)}" if args.save_boxes_copy else None
+    if full_cover_applied:
+        final_image = img_combined
+    elif args.blur:
+        final_image = img_combined
+    elif args.boxes:
+        final_image = img_boxes if args.save_boxes_copy else img_combined
+    else:
+        final_image = img
 
     cv2_imwrite(output_path, final_image)
-    cv2_imwrite(blur_path, img_blur)
-    cv2_imwrite(detect_path, img_boxes)
+    if blur_path:
+        cv2_imwrite(blur_path, img_blur)
+    if detect_path:
+        cv2_imwrite(detect_path, img_boxes)
 
     log_file_path = f"Logs/{os.path.basename(output_path)}.log"
     with open(log_file_path, "w", encoding="utf-8") as log_file:
@@ -563,7 +791,20 @@ def render_image_outputs(args, detections, rules, blur_kernel, mask_shape, solid
                 f"Censor: {item['censor']}, Blur: {item['blur']}, Box: {item['box']}\n"
             )
 
-    return output_path, blur_path, detect_path
+    rendering = {
+        "boxes_on_final": bool(args.boxes and not full_cover_applied),
+        "regional_censoring": bool(args.blur and not full_cover_applied),
+        "censorable_regions": censorable_count,
+        "nsfw_regions_for_full_cover_rule": nsfw_censorable_count,
+        "boxes_copy_saved": bool(detect_path),
+        "blur_copy_saved": bool(blur_path),
+        "full_cover_applied": full_cover_applied,
+        "full_cover_mode": cover_options["mode"] if full_cover_applied else None,
+        "full_cover_reason": reason_kind if full_cover_applied else None,
+        "full_cover_message": cover_message if full_cover_applied and cover_options["show_text"] else None,
+        "solid_cover_reveals_source_pixels": False if full_cover_applied and cover_options["mode"] != "blur" else None,
+    }
+    return output_path, blur_path, detect_path, log_data, rendering
 
 if __name__ == "__main__":
     create_directories()  # Create directories before processing
@@ -581,26 +822,93 @@ if __name__ == "__main__":
 
     exception_file_path = args.exception or "BlurException.rule"
     rules = load_blur_exception_rules(exception_file_path)
+    protection_rules = load_protection_rules(exception_file_path)
+    if args.block_if_nsfw_and_child is not None:
+        protection_rules["BLOCK_IF_NSFW_AND_CHILD"] = args.block_if_nsfw_and_child
+    if args.block_if_child is not None:
+        protection_rules["BLOCK_IF_CHILD"] = args.block_if_child
+    if args.block_on_age_review is not None:
+        protection_rules["BLOCK_ON_AGE_REVIEW"] = args.block_on_age_review
+    if args.child_nsfw_min_risk is not None:
+        protection_rules["PROTECTION_NSFW_MIN_RISK"] = args.child_nsfw_min_risk
+    if args.child_nsfw_min_confidence is not None:
+        protection_rules["PROTECTION_NSFW_MIN_CONFIDENCE"] = max(
+            0.0, min(1.0, args.child_nsfw_min_confidence)
+        )
     providers = parse_provider_list(args.providers)
 
-    detections = _run_selected_detectors(
-        args.input,
-        enabled_detectors,
-        providers,
-        args.object_model,
-        args.object_labels,
-        args.object_threshold,
-    )
+    underage_age = args.underage_age if args.underage_age is not None else protection_rules["UNDERAGE_AGE"]
+    age_review_margin = args.age_review_margin if args.age_review_margin is not None else protection_rules["AGE_REVIEW_MARGIN"]
+
+    try:
+        detections, demographics = _run_selected_detectors(
+            args.input,
+            enabled_detectors,
+            providers,
+            args.object_model,
+            args.object_labels,
+            args.object_threshold,
+            args.age_gender_model,
+            underage_age,
+            age_review_margin,
+            args.min_face_size,
+            args.face_padding,
+            args.nsfw_model,
+        )
+    except AgeGenderModelMissingError as exc:
+        raise SystemExit(f"ERROR: {exc}") from None
     print(f"Detections found: {len(detections)}")
 
-    output_path, blur_path, detect_path = render_image_outputs(
+    nsfw_gate = protection_nsfw_summary(detections, protection_rules)
+    protection_policy = evaluate_protection_policy(
+        nsfw_gate["detected"],
+        demographics,
+        block_if_nsfw_and_underage=protection_rules["BLOCK_IF_NSFW_AND_CHILD"],
+        block_if_underage=protection_rules["BLOCK_IF_CHILD"],
+        block_on_age_review=protection_rules["BLOCK_ON_AGE_REVIEW"],
+    )
+    protection_policy["nsfw_gate"] = nsfw_gate
+    print(
+        f"Protection verdict: {protection_policy['verdict']} "
+        f"(underage={protection_policy['underage_detected']}, nsfw={protection_policy['nsfw_detected']})"
+    )
+
+    output_path, blur_path, detect_path, log_data, rendering = render_image_outputs(
         args,
         detections,
         rules,
         blur_kernel,
         mask_shape,
         solid_color,
+        protection_policy,
+        protection_rules,
     )
+    analysis_path = f"Logs/{os.path.basename(output_path)}.analysis.json"
+    with open(analysis_path, "w", encoding="utf-8") as analysis_file:
+        json.dump(
+            {
+                "input": os.path.abspath(args.input),
+                "checks": enabled_detectors,
+                "detections": log_data,
+                "demographics": demographics,
+                "protection_policy": protection_policy,
+                "rendering": rendering,
+            },
+            analysis_file,
+            indent=2,
+        )
     print(f"Censored image saved at: {output_path}")
-    print(f"Blur image saved at: {blur_path}")
-    print(f"Boxes detection image saved at: {detect_path}")
+    if blur_path:
+        print(f"Blur image saved at: {blur_path}")
+    if detect_path:
+        print(f"Boxes detection image saved at: {detect_path}")
+    if rendering["full_cover_applied"]:
+        print(
+            f"Full cover applied: mode={rendering['full_cover_mode']}, "
+            f"reason={rendering['full_cover_reason']}"
+        )
+    print(f"Analysis JSON saved at: {analysis_path}")
+    if args.fail_on_policy and protection_policy["blocked"]:
+        raise SystemExit(2)
+    if args.fail_on_underage and demographics.get("underage_detected"):
+        raise SystemExit(3)

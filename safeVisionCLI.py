@@ -28,6 +28,7 @@ except ImportError:
 
 from safevision_utils import (
     ALL_CENSOR_LABELS,
+    PROTECTION_RULE_DEFAULTS,
     default_blur_rules,
     ensure_blur_exception_rules,
     load_blur_exception_rules,
@@ -48,12 +49,12 @@ VIDEO_EXTENSIONS = {".mp4", ".avi", ".mov", ".mkv", ".wmv", ".m4v", ".webm"}
 SCRIPT_TARGETS = {
     "image": "main.py",
     "video": "video.py",
-    "gui": "SafeVisionGUI.py",
+    "gui": "apps/desktop/SafeVisionGUI.py",
     "api": "safevision_api.py",
     "web": "safevision_api.py",
-    "live": "live.py",
-    "streamer": "live_streamer.py",
-    "screen": "safeVisionScreenGuard.py",
+    "live": "apps/live/live.py",
+    "streamer": "apps/live/live_streamer.py",
+    "screen": "apps/live/safeVisionScreenGuard.py",
 }
 
 
@@ -105,15 +106,23 @@ def print_error(message):
 
 def default_profiles():
     return {
-        "default": default_blur_rules(),
-        "strict": default_blur_rules(),
+        "default": {**default_blur_rules(), **PROTECTION_RULE_DEFAULTS},
+        "strict": {
+            **default_blur_rules(),
+            **PROTECTION_RULE_DEFAULTS,
+            "ARMPITS_EXPOSED": True,
+            "PROTECTION_NSFW_MIN_RISK": "MODERATE",
+            "PROTECTION_NSFW_MIN_CONFIDENCE": 0.35,
+        },
         "faces_allowed": {
             **default_blur_rules(),
+            **PROTECTION_RULE_DEFAULTS,
             "FACE_FEMALE": False,
             "FACE_MALE": False,
         },
         "covered_allowed": {
             **default_blur_rules(),
+            **PROTECTION_RULE_DEFAULTS,
             "FEMALE_GENITALIA_COVERED": False,
             "BELLY_COVERED": False,
             "FEET_COVERED": False,
@@ -141,10 +150,17 @@ def default_config():
         },
         "processing": {
             "providers": "",
-            "detectors": "nude",
+            "detectors": "nude,age,gender",
+            "rule_file": "BlurException.rule",
+            "nsfw_model": "Models/best.onnx",
             "object_model": "Models/safety_objects.onnx",
             "object_labels": "Models/safety_objects.labels.json",
             "object_threshold": 0.25,
+            "age_gender_model": "Models/onnx-communityage-gender-prediction-ONNX.onnx",
+            "underage_age": 18.0,
+            "age_review_margin": 3.0,
+            "min_face_size": 32,
+            "face_padding": 0.18,
             "codec": "mp4v",
             "mask_shape": "rectangle",
             "mask_color": "0,0,0",
@@ -155,6 +171,15 @@ def default_config():
             "delete_frames": True,
             "rule": "0/0",
             "full_blur_rule": "",
+            "boxes": True,
+            "save_boxes_copy": False,
+            "save_blur_copy": True,
+            "full_cover_mode": "blur",
+            "full_cover_color": "96,96,96",
+            "full_cover_text_color": "255,255,255",
+            "full_cover_text": True,
+            "full_cover_message": "",
+            "force_full_cover": False,
             "save_report": False,
             "report_formats": "json,csv",
             "export_markers": "",
@@ -190,6 +215,7 @@ def default_config():
             "show_boxes": True,
             "show_labels": False,
             "show_status": False,
+            "show_demographics": False,
             "block_enabled": False,
             "blur_enabled": False,
             "privacy_on_detection": False,
@@ -302,9 +328,23 @@ def rule_profile(config, name=None):
 
 
 def normalize_rules(rules):
-    normalized = default_blur_rules()
-    for label, value in rules.items():
-        normalized[label] = bool(value)
+    normalized = {**default_blur_rules(), **PROTECTION_RULE_DEFAULTS}
+    for label in ALL_CENSOR_LABELS:
+        if label in rules:
+            normalized[label] = bool(rules[label])
+    for key, default in PROTECTION_RULE_DEFAULTS.items():
+        if key not in rules:
+            continue
+        if isinstance(default, bool):
+            normalized[key] = bool(rules[key])
+        elif isinstance(default, (int, float)):
+            try:
+                normalized[key] = float(rules[key])
+            except (TypeError, ValueError):
+                normalized[key] = default
+        else:
+            text = str(rules[key]).strip()
+            normalized[key] = (text.upper() if key == "PROTECTION_NSFW_MIN_RISK" else text) or default
     return normalized
 
 
@@ -499,6 +539,14 @@ def command_status(args):
     except Exception as exc:
         print_warn(f"Could not inspect ONNX Runtime providers: {exc}")
 
+    print_header("Child Protection")
+    processing = config.get("processing", {})
+    age_model = resolve_app_path(processing.get("age_gender_model", "Models/onnx-communityage-gender-prediction-ONNX.onnx"))
+    print(f"checks                 {processing.get('detectors')}")
+    print(f"age/gender model       {bool_text(age_model.exists())}  {age_model}")
+    print(f"underage threshold     {processing.get('underage_age', 18)} estimated years")
+    print(f"review margin          {processing.get('age_review_margin', 3)} years")
+
     screen_guard = config.get("screen_guard", {})
     print_header("Screen Guard")
     for key in [
@@ -523,6 +571,7 @@ def command_status(args):
         "exclude_overlay_capture",
         "show_boxes",
         "show_labels",
+        "show_demographics",
         "block_enabled",
         "blur_enabled",
         "privacy_on_detection",
@@ -627,7 +676,7 @@ def command_rules(args):
         for name in sorted(profiles):
             marker = "*" if name == active else " "
             normalized = normalize_rules(profiles[name])
-            enabled = sum(1 for value in normalized.values() if value)
+            enabled = sum(1 for label in ALL_CENSOR_LABELS if normalized.get(label))
             disabled = len(ALL_CENSOR_LABELS) - enabled
             print(f"{marker} {name:18} blur={enabled:2} skip={disabled:2}")
         return
@@ -638,6 +687,9 @@ def command_rules(args):
         print_header(f"Rule Profile: {name}")
         for label in ALL_CENSOR_LABELS:
             print(f"{label:30} {'blur' if rules.get(label, True) else 'skip'}")
+        print_header("Child Protection Policy")
+        for key in PROTECTION_RULE_DEFAULTS:
+            print(f"{key:30} {rules.get(key)}")
         return
 
     if args.rules_action == "use":
@@ -661,15 +713,25 @@ def command_rules(args):
 
     if args.rules_action == "set":
         name, rules = rule_profile(config, args.profile)
-        if args.label not in ALL_CENSOR_LABELS:
+        if args.label not in ALL_CENSOR_LABELS and args.label not in PROTECTION_RULE_DEFAULTS:
             print_error(f"Unknown label: {args.label}")
             return 2
-        rules[args.label] = parse_bool(args.value)
+        default_value = PROTECTION_RULE_DEFAULTS.get(args.label)
+        if isinstance(default_value, bool) or args.label not in PROTECTION_RULE_DEFAULTS:
+            rules[args.label] = parse_bool(args.value)
+        elif isinstance(default_value, (int, float)):
+            try:
+                rules[args.label] = float(args.value)
+            except ValueError:
+                print_error(f"{args.label} must be a number")
+                return 2
+        else:
+            rules[args.label] = str(args.value).strip().upper()
         profiles[name] = normalize_rules(rules)
         save_config(config)
         if name == config.get("active_rule_profile"):
             write_blur_exception_rules(DEFAULT_RULE_PATH, rules=profiles[name])
-        print_ok(f"{name}: {args.label} = {'true' if rules[args.label] else 'false'}")
+        print_ok(f"{name}: {args.label} = {rules[args.label]}")
         return
 
     if args.rules_action == "delete":
@@ -699,9 +761,12 @@ def append_common_processing_options(command, config, args):
     providers = args.providers if getattr(args, "providers", None) is not None else processing.get("providers", "")
     if providers:
         command.extend(["--providers", providers])
+    nsfw_model = getattr(args, "nsfw_model", None) or processing.get("nsfw_model")
+    if nsfw_model:
+        command.extend(["--nsfw-model", str(nsfw_model)])
     detectors = getattr(args, "detectors", None)
     if detectors is None:
-        detectors = processing.get("detectors", "nude")
+        detectors = processing.get("detectors", "nude,age,gender")
     if detectors:
         command.extend(["--detectors", str(detectors)])
     object_model = getattr(args, "object_model", None) or processing.get("object_model")
@@ -715,6 +780,64 @@ def append_common_processing_options(command, config, args):
         object_threshold = processing.get("object_threshold")
     if object_threshold not in (None, ""):
         command.extend(["--object-threshold", str(object_threshold)])
+    age_gender_model = getattr(args, "age_gender_model", None) or processing.get("age_gender_model")
+    if age_gender_model:
+        command.extend(["--age-gender-model", str(age_gender_model)])
+    underage_age = getattr(args, "underage_age", None)
+    if underage_age is None:
+        underage_age = processing.get("underage_age")
+    if underage_age not in (None, ""):
+        command.extend(["--underage-age", str(underage_age)])
+    age_review_margin = getattr(args, "age_review_margin", None)
+    if age_review_margin is None:
+        age_review_margin = processing.get("age_review_margin")
+    if age_review_margin not in (None, ""):
+        command.extend(["--age-review-margin", str(age_review_margin)])
+    min_face_size = getattr(args, "min_face_size", None)
+    if min_face_size is None:
+        min_face_size = processing.get("min_face_size")
+    if min_face_size not in (None, ""):
+        command.extend(["--min-face-size", str(min_face_size)])
+    face_padding = getattr(args, "face_padding", None)
+    if face_padding is None:
+        face_padding = processing.get("face_padding")
+    if face_padding not in (None, ""):
+        command.extend(["--face-padding", str(face_padding)])
+    full_cover_mode = getattr(args, "full_cover_mode", None) or processing.get("full_cover_mode")
+    if full_cover_mode:
+        command.extend(["--full-cover-mode", str(full_cover_mode)])
+    for attribute, key, flag in (
+        ("full_cover_color", "full_cover_color", "--full-cover-color"),
+        ("full_cover_text_color", "full_cover_text_color", "--full-cover-text-color"),
+        ("full_cover_message", "full_cover_message", "--full-cover-message"),
+    ):
+        value = getattr(args, attribute, None)
+        if value is None:
+            value = processing.get(key)
+        if value not in (None, ""):
+            command.extend([flag, str(value)])
+    full_cover_text = getattr(args, "full_cover_text", None)
+    if full_cover_text is None:
+        full_cover_text = processing.get("full_cover_text")
+    if full_cover_text is not None:
+        command.append("--full-cover-text" if full_cover_text else "--no-full-cover-text")
+    force_full_cover = bool(getattr(args, "force_full_cover", False) or processing.get("force_full_cover", False))
+    if force_full_cover:
+        command.append("--force-full-cover")
+    for attribute, enabled_flag, disabled_flag in (
+        ("block_if_nsfw_and_child", "--block-if-nsfw-and-child", "--no-block-if-nsfw-and-child"),
+        ("block_if_child", "--block-if-child", "--no-block-if-child"),
+        ("block_on_age_review", "--block-on-age-review", "--no-block-on-age-review"),
+    ):
+        value = getattr(args, attribute, None)
+        if value is not None:
+            command.append(enabled_flag if value else disabled_flag)
+    child_risk = getattr(args, "child_nsfw_min_risk", None)
+    if child_risk:
+        command.extend(["--child-nsfw-min-risk", str(child_risk)])
+    child_confidence = getattr(args, "child_nsfw_min_confidence", None)
+    if child_confidence is not None:
+        command.extend(["--child-nsfw-min-confidence", str(child_confidence)])
     return command
 
 
@@ -727,6 +850,7 @@ def clean_extra_args(extra):
 
 def screen_guard_args_from_config(config):
     settings = config.get("screen_guard", {})
+    processing = config.get("processing", {})
     args = []
     value_options = [
         ("monitor", "--monitor"),
@@ -770,6 +894,19 @@ def screen_guard_args_from_config(config):
     if providers:
         args.extend(["--providers", str(providers)])
 
+    demographic_value_options = [
+        ("detectors", "--detectors"),
+        ("age_gender_model", "--age-gender-model"),
+        ("underage_age", "--underage-age"),
+        ("age_review_margin", "--age-review-margin"),
+        ("min_face_size", "--min-face-size"),
+        ("face_padding", "--face-padding"),
+    ]
+    for key, flag in demographic_value_options:
+        value = settings.get(key, processing.get(key))
+        if value not in (None, ""):
+            args.extend([flag, str(value)])
+
     mode = settings.get("mode", "box")
     mode_defaults = {
         "show_boxes": mode in {"box", "both", "block"},
@@ -806,6 +943,8 @@ def screen_guard_args_from_config(config):
 
     if settings.get("show_status"):
         args.append("--show-status")
+    if settings.get("show_demographics"):
+        args.append("--show-demographics")
 
     return args
 
@@ -835,10 +974,28 @@ def command_process(args):
     if target == "image":
         processing = config["processing"]
         command = [python_command(), str(script_path("image")), "-i", str(input_path)]
+        rule_file = getattr(args, "exception", None) or processing.get("rule_file")
+        if rule_file:
+            command.extend(["-e", str(rule_file)])
         if args.output:
             command.extend(["-o", args.output])
         if args.blur:
             command.append("-b")
+        boxes = getattr(args, "boxes", None)
+        if boxes is None:
+            boxes = processing.get("boxes")
+        if boxes is not None:
+            command.append("--boxes" if boxes else "--no-boxes")
+        save_boxes_copy = getattr(args, "save_boxes_copy", None)
+        if save_boxes_copy is None:
+            save_boxes_copy = processing.get("save_boxes_copy")
+        if save_boxes_copy is not None:
+            command.append("--save-boxes-copy" if save_boxes_copy else "--no-save-boxes-copy")
+        save_blur_copy = getattr(args, "save_blur_copy", None)
+        if save_blur_copy is None:
+            save_blur_copy = processing.get("save_blur_copy")
+        if save_blur_copy is not None:
+            command.append("--save-blur-copy" if save_blur_copy else "--no-save-blur-copy")
         if args.full_blur_rule:
             command.extend(["-fbr", args.full_blur_rule])
         if getattr(args, "color", False):
@@ -860,16 +1017,28 @@ def command_process(args):
         if blur_sigma:
             command.extend(["--blur-sigma", str(blur_sigma)])
         append_common_processing_options(command, config, args)
+        if getattr(args, "fail_on_policy", False):
+            command.append("--fail-on-policy")
+        if getattr(args, "fail_on_underage", False):
+            command.append("--fail-on-underage")
     else:
         processing = config["processing"]
         command = [python_command(), str(script_path("video")), "-i", str(input_path), "-t", "video"]
+        rule_file = getattr(args, "exception", None) or processing.get("rule_file")
+        if rule_file:
+            command.extend(["-e", str(rule_file)])
         video_output = args.output_dir or processing.get("video_output") or config["paths"].get("video_output")
         if video_output:
             command.extend(["-vo", video_output])
         if getattr(args, "analyze_only", False):
             command.append("--analyze-only")
-        if args.boxes:
+        if args.boxes is True:
             command.append("-b")
+        elif args.boxes is False:
+            command.append("--no-boxes")
+        save_boxes_copy = getattr(args, "save_boxes_copy", None)
+        if save_boxes_copy is not None:
+            command.append("--save-boxes-copy" if save_boxes_copy else "--no-save-boxes-copy")
         if args.blur:
             command.append("--blur")
         if args.with_audio or processing.get("with_audio"):
@@ -1014,6 +1183,16 @@ def interactive_process():
         object_model=processing.get("object_model", "Models/safety_objects.onnx"),
         object_labels=processing.get("object_labels", "Models/safety_objects.labels.json"),
         object_threshold=processing.get("object_threshold", 0.25),
+        age_gender_model=processing.get(
+            "age_gender_model",
+            "Models/onnx-communityage-gender-prediction-ONNX.onnx",
+        ),
+        underage_age=processing.get("underage_age", 18.0),
+        age_review_margin=processing.get("age_review_margin", 3.0),
+        min_face_size=processing.get("min_face_size", 32),
+        face_padding=processing.get("face_padding", 0.18),
+        fail_on_policy=False,
+        fail_on_underage=False,
         blur=False,
         boxes=False,
         with_audio=False,
@@ -1037,12 +1216,28 @@ def interactive_process():
 
     args.detectors = choose_from_values(
         "Detector Models",
-        ["nude", "objects", "both"],
-        default=processing.get("detectors", "nude"),
+        [
+            "nude,age,gender",
+            "nude",
+            "age",
+            "gender",
+            "demographics",
+            "objects",
+            "nude,objects",
+            "all",
+        ],
+        default=processing.get("detectors", "nude,age,gender"),
         allow_back=False,
     )
-    if args.detectors in {"objects", "both"}:
+    if "objects" in args.detectors or args.detectors == "all":
         args.object_threshold = float(prompt("Safety-object threshold", default=str(args.object_threshold or 0.25)))
+    if args.detectors in {"age", "demographics", "nude,age,gender", "all"}:
+        args.underage_age = float(
+            prompt("Estimated underage threshold", default=str(args.underage_age or 18.0))
+        )
+        args.age_review_margin = float(
+            prompt("Age review margin", default=str(args.age_review_margin or 3.0))
+        )
 
     if suffix in IMAGE_EXTENSIONS:
         args.blur = prompt_bool("Apply blur/mask to detected regions", default=True)
@@ -1106,6 +1301,11 @@ def interactive_settings():
         ("Safety object model", "processing.object_model"),
         ("Safety object labels", "processing.object_labels"),
         ("Safety object threshold", "processing.object_threshold"),
+        ("Age/gender model", "processing.age_gender_model"),
+        ("Underage age threshold", "processing.underage_age"),
+        ("Age review margin", "processing.age_review_margin"),
+        ("Minimum face size", "processing.min_face_size"),
+        ("Face crop padding", "processing.face_padding"),
         ("Video codec", "processing.codec"),
         ("Mask shape", "processing.mask_shape"),
         ("Mask color", "processing.mask_color"),
@@ -1142,6 +1342,7 @@ def interactive_settings():
         ("Screen guard exclude overlay from capture", "screen_guard.exclude_overlay_capture"),
         ("Screen guard show boxes", "screen_guard.show_boxes"),
         ("Screen guard show labels", "screen_guard.show_labels"),
+        ("Screen guard show demographic boxes", "screen_guard.show_demographics"),
         ("Screen guard show status", "screen_guard.show_status"),
         ("Screen guard block regions", "screen_guard.block_enabled"),
         ("Screen guard blur regions", "screen_guard.blur_enabled"),
@@ -1198,7 +1399,12 @@ def interactive_settings():
             elif key == "processing.codec":
                 value = choose_from_values("Video Codec", ["mp4v", "avc1", "xvid", "mjpg"], default=current, allow_back=False)
             elif key == "processing.detectors":
-                value = choose_from_values("Detector Models", ["nude", "objects", "both"], default=current, allow_back=False)
+                value = choose_from_values(
+                    "Checks",
+                    ["nude,age,gender", "nude,age", "nude,gender", "age,gender", "nude", "objects", "all"],
+                    default=current,
+                    allow_back=False,
+                )
             elif key == "processing.export_markers":
                 value = choose_from_values("Marker Export", ["none", "edl", "fcpxml", "both"], default=current or "none", allow_back=False)
                 if value == "none":
@@ -1505,12 +1711,23 @@ def build_parser():
     process_parser.add_argument("-o", "--output", help="Image output file")
     process_parser.add_argument("--output-dir", help="Video output folder")
     process_parser.add_argument("--providers", help="Comma-separated ONNX providers")
-    process_parser.add_argument("--detectors", choices=["nude", "objects", "both"], help="Detector set to use")
+    process_parser.add_argument("-e", "--exception", help="Path to a .rule file or rule_templates preset")
+    process_parser.add_argument("--nsfw-model", help="Path to SafeVision NSFW ONNX model")
+    process_parser.add_argument("--detectors", help="Comma-separated checks: nude, age, gender, objects, demographics, or all")
     process_parser.add_argument("--object-model", help="Path to safety-object ONNX model")
     process_parser.add_argument("--object-labels", help="Path to safety-object labels JSON")
     process_parser.add_argument("--object-threshold", type=float, help="Minimum confidence for safety-object detections")
+    process_parser.add_argument("--age-gender-model", help="Path to age/gender ONNX model")
+    process_parser.add_argument("--underage-age", type=float, help="Estimated underage threshold")
+    process_parser.add_argument("--age-review-margin", type=float, help="Review band above the underage threshold")
+    process_parser.add_argument("--min-face-size", type=int, help="Minimum fallback face size")
+    process_parser.add_argument("--face-padding", type=float, help="Face crop padding fraction")
+    process_parser.add_argument("--fail-on-policy", action="store_true", help="Return exit 2 when child-protection policy blocks an image")
+    process_parser.add_argument("--fail-on-underage", action="store_true", help="Return exit 3 when estimated underage is found in an image")
     process_parser.add_argument("--blur", action="store_true", help="Apply blur/mask to detections")
-    process_parser.add_argument("--boxes", action="store_true", help="For video, generate detection-box output")
+    process_parser.add_argument("--boxes", action=argparse.BooleanOptionalAction, default=None, help="Enable or disable detection boxes")
+    process_parser.add_argument("--save-boxes-copy", action=argparse.BooleanOptionalAction, default=None, help="Enable or disable the unredacted debug boxes copy")
+    process_parser.add_argument("--save-blur-copy", action=argparse.BooleanOptionalAction, default=None, help="Enable or disable the separate regional-censor image copy")
     process_parser.add_argument("-a", "--with-audio", action="store_true")
     process_parser.add_argument("-c", "--codec", choices=["mp4v", "avc1", "xvid", "mjpg"])
     process_parser.add_argument("-df", "--delete-frames", action="store_true")
@@ -1527,6 +1744,17 @@ def build_parser():
     process_parser.add_argument("--marker-gap", type=float, help="Seconds between detections before a new marker")
     process_parser.add_argument("-r", "--rule", help="Video full blur monitor rule percentage/count")
     process_parser.add_argument("-fbr", "--full-blur-rule", help="Full blur rule")
+    process_parser.add_argument("--full-cover-mode", choices=["blur", "gray", "black", "color"])
+    process_parser.add_argument("--full-cover-color", help="B,G,R or #RRGGBB solid cover color")
+    process_parser.add_argument("--full-cover-text-color", help="B,G,R or #RRGGBB warning text color")
+    process_parser.add_argument("--full-cover-text", action=argparse.BooleanOptionalAction, default=None)
+    process_parser.add_argument("--full-cover-message", help="Override the automatic centered warning")
+    process_parser.add_argument("--force-full-cover", action="store_true")
+    process_parser.add_argument("--block-if-nsfw-and-child", action=argparse.BooleanOptionalAction, default=None)
+    process_parser.add_argument("--block-if-child", action=argparse.BooleanOptionalAction, default=None)
+    process_parser.add_argument("--block-on-age-review", action=argparse.BooleanOptionalAction, default=None)
+    process_parser.add_argument("--child-nsfw-min-risk", choices=["LOW", "MODERATE", "HIGH", "CRITICAL"])
+    process_parser.add_argument("--child-nsfw-min-confidence", type=float)
     process_parser.add_argument("--ffmpeg-path")
     process_parser.set_defaults(func=command_process)
 

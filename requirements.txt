@@ -2,8 +2,7 @@
 # SafeVision Complete Requirements
 # ================================
 # Comprehensive dependencies for all SafeVision components
-# Generated from: main.py, video.py, live.py, live_streamer.py, 
-# safevision_api.py, safevision_gui_new.py
+# Used by the image/video engines, apps/, and the compatibility API launcher.
 
 # ===================
 # Core Dependencies
@@ -16,7 +15,7 @@ pillow>=9.0.0
 
 # Machine Learning & ONNX Runtime
 onnx>=1.11.0
-onnxruntime>=1.10.0
+onnxruntime>=1.18,<2
 
 # Progress Bars & CLI Tools
 tqdm>=4.62.0
@@ -26,7 +25,7 @@ colorama>=0.4.6
 # GUI Framework
 # ===================
 
-# PyQt5 for Desktop GUI (safevision_gui_new.py)
+# PyQt5 for apps/desktop/SafeVisionGUI.py (root launcher: SafeVisionGUI.py)
 PyQt5>=5.15.6
 
 # ===================
@@ -42,30 +41,27 @@ werkzeug>=2.0.0
 # Video Processing
 # ===================
 
-# FFmpeg Python wrapper (video.py, v_c.py)
+# FFmpeg Python wrapper used by video.py
 ffmpeg-python>=0.2.0
-
-# MoviePy for video editing fallback (v_c.py)
-moviepy>=1.0.3
 
 # ===================
 # Live Streaming
 # ===================
 
-# OBS WebSocket integration (live_streamer.py)
+# OBS WebSocket integration (apps/live/live_streamer.py)
 obsws-python>=1.5.0
 
-# Screen capture (live_streamer.py, screen_overlay_detector.py)
+# Screen capture (apps/live/live_streamer.py and safeVisionScreenGuard.py)
 mss>=6.1.0
 
-# Virtual camera support (live_streamer.py)
+# Virtual camera support (apps/live/live_streamer.py)
 pyvirtualcam>=0.10.0
 
 # ===================
 # Windows-specific
 # ===================
 
-# Windows API bindings (screen_overlay_detector.py)
+# Windows API bindings for Screen Guard
 pywin32>=227; sys_platform == "win32"
 
 # ===================
