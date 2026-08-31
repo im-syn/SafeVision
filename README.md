@@ -50,6 +50,11 @@
 > age, and model-reported gender together while keeping common armpit/body
 > context from causing a compound child-protection block.
 
+> [!NOTE]
+> **Hosted API:** [Open the SafeVision RapidAPI playground](https://rapidapi.com/isynx/api/safevision/playground/apiendpoint_aa3ac8f2-2f16-4797-b1d6-ae13c889de15).
+> Hosted limits, availability, and policies may differ from a local SafeVision
+> deployment.
+
 <table>
   <tr>
     <td width="25%" valign="top">
